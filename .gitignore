@@ -1,9 +1,9 @@
 örnek.txt
 v10.txt
 .DS_Store
-.idea/vcs.xml
-.idea/SignalTagger.iml
-.idea/php.xml
 .idea/modules.xml
+.idea/php.xml
+.idea/SignalTagger.iml
+.idea/vcs.xml
 .idea/.gitignore
 .gitignore
