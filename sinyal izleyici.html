@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P-DETSi Lab - Peak Analyzer</title>
+
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Libraries -->
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/modules/boost.js"></script>
+    <script src="https://code.highcharts.com/modules/histogram-bellcurve.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div id="loading">
+        <div id="loadingText">Processing Data...</div>
+        <div class="loading-bar">
+            <div id="loadingProgress" class="loading-progress"></div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">Settings</h3>
+            <div class="input-group mb-15">
+                <label class="input-label">UI Scale (Zoom): <span id="uiScaleValue">1.0x</span></label>
+                <input type="range" id="uiScaleInput" min="0.5" max="1.5" step="0.05" value="1"
+                    oninput="updateUIScale(this.value)">
+            </div>
+            <button class="btn-text-only" onclick="closeModal('settingsModal')">Close</button>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="exportModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">Export Options</h3>
+            <button class="modal-btn" onclick="performExport('full')">Full Dataset</button>
+            <button class="modal-btn" onclick="performExport('progress')">Up To Current View</button>
+            <button class="modal-btn" onclick="performExport('onlyLabels')">Only Labeled Regions</button>
+            <button class="modal-btn" onclick="performExport('smoothed')">Export Smoothed Signal</button>
+            <button class="modal-btn" onclick="exportAnalysisTable()">Export Analysis Table</button>
+            <button class="btn-text-only" onclick="closeModal('exportModal')">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Class Manager Modal -->
+    <div id="classManagerModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">Manage Classes</h3>
+            <div class="class-list" id="classListContainer"></div>
+            <div class="new-class-form">
+                <input type="text" id="newClassName" class="new-class-input" placeholder="Class Name">
+                <input type="color" id="newClassColor" value="#ff00ff" class="color-picker-input">
+                <button onclick="addNewClass()" class="btn-sm-add">+</button>
+            </div>
+
+            <!-- Static Conversion UI -->
+            <div class="conversion-section">
+                <h4>Convert Labels</h4>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <select id="convertFromSelect" class="input-mini" style="width: auto;"></select>
+                    <span>➔</span>
+                    <select id="convertToSelect" class="input-mini" style="width: auto;"></select>
+                    <button id="btnConvertLabels" class="btn-blue" style="padding: 2px 8px;">Convert</button>
+                    <!-- Debug Button -->
+                    <button onclick="populateConversionSelectors(); alert('Refreshed!')"
+                        style="padding: 2px 5px; font-size: 0.7em;">↻</button>
+                </div>
+            </div>
+
+            <button class="btn-text-only" onclick="closeModal('classManagerModal')">Done</button>
+        </div>
+    </div>
+
+    <!-- Peak Detection Modal -->
+    <div id="peakModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title-peak">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 20h18L12 4z" />
+                </svg>
+                Peak Finder
+            </h3>
+            <div class="tab-header">
+                <button class="tab-btn active" onclick="switchTab('tab-threshold')">Method 1: Threshold</button>
+                <button class="tab-btn" onclick="switchTab('tab-prominence')">Method 2: Prominence</button>
+            </div>
+            <div id="tab-threshold" class="tab-content active">
+                <p class="modal-description">Marks continuous regions where
+                    signal > Threshold for at least 'Min Samples'.</p>
+                <div class="input-group mb-10"><label class="input-label">Threshold
+                        Value</label><input type="number" id="peakThreshold" value="0.5" step="0.1" class="input-full">
+                </div>
+                <div class="input-group mb-15"><label class="input-label">Min Width
+                        (Samples)</label><input type="number" id="peakMinWidth" value="10" step="1" class="input-full">
+                </div>
+                <button class="modal-btn peak-btn" onclick="runThresholdDetection()">Run Threshold Detection</button>
+            </div>
+            <div id="tab-prominence" class="tab-content">
+                <p class="modal-description">Finds local maxima standing
+                    out by 'Prominence'.</p>
+                <div class="input-group mb-10"><label class="input-label">Min
+                        Prominence</label><input type="number" id="peakProminence" value="0.5" step="0.1"
+                        class="input-full"></div>
+                <div class="input-group mb-15"><label class="input-label">Mark Width</label><input type="number"
+                        id="peakMarkWidth" value="2" step="1" class="input-full"></div>
+                <button class="modal-btn peak-btn" onclick="runProminenceDetection()">Run Prominence Detection</button>
+            </div>
+
+            <div class="h-divider"></div>
+            <h4 class="section-header">
+                Post-Processing</h4>
+
+            <button class="modal-btn btn-outline-muted" onclick="expandPeaksToBaseline()"
+                title="Expand existing peaks down to baseline level">
+                Expand Peaks to Baseline (Full Hill)
+            </button>
+
+            <p id="peakResultMsg" class="result-msg">
+            </p>
+            <button class="btn-text-only" onclick="closeModal('peakModal')">Close</button>
+        </div>
+    </div>
+
+    <!-- Histogram Modal -->
+    <div id="histoModal" class="modal-overlay">
+        <div class="modal modal-xl">
+            <h3 class="modal-title-histo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 20V10M12 20V4M6 20v-6" />
+                </svg>
+                Histogram & Gaussian Fit
+            </h3>
+
+            <div class="histo-toolbar">
+                <div class="flex-center">
+                    <label class="checkbox-wrapper">
+                        <input type="radio" name="histoScope" value="window" checked
+                            onchange="runHistogramAnalysis(true)"> View
+                    </label>
+                    <label class="checkbox-wrapper">
+                        <input type="radio" name="histoScope" value="full" onchange="runHistogramAnalysis(true)"> Full
+                    </label>
+                </div>
+
+                <div class="flex-center">
+                    <div class="input-group">
+                        <span class="input-label">Bins</span>
+                        <input type="number" id="histoBins" value="100" min="10" max="2000" step="10"
+                            class="input-histo-bins" onchange="runHistogramAnalysis(false)">
+                    </div>
+                    <label class="checkbox-wrapper" title="Logarithmic Y-Axis">
+                        <input type="checkbox" id="histoLogScale" onchange="updateHistoChart()"> Log Y
+                    </label>
+                </div>
+            </div>
+
+            <div id="histoChart" class="chart-container-lg"></div>
+
+            <div class="histo-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Fitted Mean (Baseline)</span>
+                    <span class="stat-value" id="statMean">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Fitted Sigma (Noise)</span>
+                    <span class="stat-value" id="statSigma">-</span>
+                </div>
+            </div>
+
+            <button class="modal-btn btn-baseline-mean" onclick="applyBaselineFromMean()">
+                Set Baseline to Fitted Mean (μ)
+            </button>
+
+            <button class="btn-text-only" onclick="closeModal('histoModal')">Close</button>
+        </div>
+    </div>
+
+    <!-- Peak Distributions Modal (NEW) -->
+    <div id="peakDistModal" class="modal-overlay">
+        <div class="modal modal-xl">
+            <h3 class="modal-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 20V10M12 20V4M6 20v-6" />
+                </svg>
+                Peak Distributions
+            </h3>
+
+            <div class="dist-container">
+                <!-- Width Chart -->
+                <div class="dist-chart-card">
+                    <div class="chart-header">
+                        <h5>Width Distribution</h5>
+                        <div class="flex-gap-5">
+                            <span class="input-label m-0">Bins</span>
+                            <input type="number" id="binsWidth" min="5" max="500" step="1"
+                                class="input-dist-bins input-dist-width" onchange="updateSingleDistChart('width')">
+                        </div>
+                    </div>
+                    <div id="distChartWidth" class="chart-flex"></div>
+                </div>
+
+                <!-- Voltage Chart -->
+                <div class="dist-chart-card">
+                    <div class="chart-header">
+                        <h5>Max Voltage Distribution</h5>
+                        <div class="flex-gap-5">
+                            <span class="input-label m-0">Bins</span>
+                            <input type="number" id="binsVoltage" min="5" max="500" step="1"
+                                class="input-dist-bins input-dist-volt" onchange="updateSingleDistChart('voltage')">
+                        </div>
+                    </div>
+                    <div id="distChartVoltage" class="chart-flex"></div>
+                </div>
+
+                <!-- Area Chart -->
+                <div class="dist-chart-card">
+                    <div class="chart-header">
+                        <h5>Area Distribution</h5>
+                        <div class="flex-gap-5">
+                            <span class="input-label m-0">Bins</span>
+                            <input type="number" id="binsArea" min="5" max="500" step="1"
+                                class="input-dist-bins input-dist-area" onchange="updateSingleDistChart('area')">
+                        </div>
+                    </div>
+                    <div id="distChartArea" class="chart-flex"></div>
+                </div>
+            </div>
+
+            <button class="btn-text-only" onclick="closeModal('peakDistModal')">Close</button>
+        </div>
+    </div>
+
+
+    <!-- SG Wizard Modal -->
+    <div id="sgWizardModal" class="modal-overlay">
+        <div class="modal modal-xl">
+            <h3 class="modal-title-wizard">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                    </path>
+                </svg>
+                SG Optimizer Wizard
+            </h3>
+            <div class="wizard-grid">
+                <div>
+                    <label class="input-label mb-5">Window Range (N)</label>
+                    <div class="flex-gap-5">
+                        <input type="number" id="wizMinW" value="5" step="2" min="3" placeholder="Min" class="w-60">
+                        <span class="text-muted">-</span>
+                        <input type="number" id="wizMaxW" value="51" step="2" min="5" placeholder="Max" class="w-60">
+                    </div>
+                </div>
+                <div>
+                    <label class="input-label mb-5">Order Range (P)</label>
+                    <div class="flex-gap-5">
+                        <input type="number" id="wizMinO" value="2" step="1" min="1" placeholder="Min" class="w-60">
+                        <span class="text-muted">-</span>
+                        <input type="number" id="wizMaxO" value="4" step="1" min="1" placeholder="Max" class="w-60">
+                    </div>
+                </div>
+            </div>
+            <div class="flex-center mb-15">
+                <label class="checkbox-wrapper"><input type="radio" name="wizScope" value="window" checked>
+                    Current View</label>
+                <label class="checkbox-wrapper"><input type="radio" name="wizScope" value="full"> Full
+                    Signal</label>
+            </div>
+            <button class="modal-btn btn-wizard-action" onclick="runSGWizard()">Run Optimization</button>
+            <div class="result-header result-row mt-10 border-none">
+                <span>Window</span><span>Order</span><span>R²</span>
+            </div>
+            <div class="wizard-results" id="wizardResults">
+                <div class="wizard-results-placeholder">Results...</div>
+            </div>
+            <button class="btn-text-only" onclick="closeModal('sgWizardModal')">Close</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="brand">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" class="brand-icon">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+            P-DETSi<span>Lab</span>
+        </div>
+        <div class="toolbar">
+            <!-- Load Main Signal -->
+            <label for="fileInput" class="file-upload-label">Load CSV</label>
+            <input type="file" id="fileInput" accept=".csv">
+
+            <!-- Add Reference Signal -->
+            <label for="refInput" class="file-upload-label ref-btn" title="Add another signal for comparison">Add Ref
+                (+)</label>
+            <input type="file" id="refInput" accept=".csv" onchange="loadReferenceCSV(this)">
+            <button class="ref-btn btn-sm-add" onclick="clearReferences()"
+                title="Clear all reference signals">×</button>
+
+            <!-- Settings Button -->
+            <button class="btn-icon" onclick="openModal('settingsModal')" title="Settings">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path
+                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z">
+                    </path>
+                </svg>
+            </button>
+
+            <div class="divider"></div>
+
+            <!-- Precision Input -->
+            <div class="input-group">
+                <span class="input-label">Precision</span>
+                <input type="number" id="precisionInput" value="3" step="1" min="0" max="15"
+                    onchange="updatePrecision()" class="input-mini">
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Invert Button -->
+            <button onclick="invertSignal()" title="Invert Signal (Multiply by -1)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M7 20V4m10 16V4M7 4l-4 4m4-4l4 4m6 12l-4-4m4 4l4-4" />
+                </svg>
+                +/-
+            </button>
+
+            <div class="divider"></div>
+
+            <div class="input-group">
+                <span class="input-label">Win Size</span>
+                <input type="number" id="windowSizeInput" value="1520" step="100" min="100">
+            </div>
+
+            <button class="lock-btn" id="lockSizeStrideBtn" onclick="toggleLock()" title="Link Window Size and Stride">
+                <svg id="iconUnlocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                </svg>
+                <svg id="iconLocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" class="hidden">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+            </button>
+
+            <div class="input-group">
+                <span class="input-label">Stride</span>
+                <input type="number" id="strideInput" value="1520" step="100" min="100">
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="input-group" title="Shift+Click on chart to set baseline">
+                <span class="input-label">Baseline</span>
+                <div class="flex-gap-5">
+                    <input type="checkbox" id="baselineToggle" class="cursor-pointer w-auto" title="Enable Baseline">
+                    <input type="number" id="baselineInput" value="0" step="0.005" disabled class="input-range">
+                </div>
+            </div>
+
+            <!-- Zero Baseline Button -->
+            <button onclick="alignBaselineToZero()" title="Shift signal to make current baseline 0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 3v12m-4-4l4 4 4-4M5 21h14" />
+                </svg>
+                0
+            </button>
+
+            <div class="divider"></div>
+
+            <!-- Filters Group -->
+            <div class="sg-controls">
+                <button id="sgToggleBtn" onclick="toggleSmooth()" title="Toggle Savitzky-Golay Filter">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12h18" />
+                        <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9z" />
+                    </svg>
+                    Smooth
+                </button>
+                <button class="wizard-btn" onclick="openModal('sgWizardModal')" title="SG Optimizer Wizard">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path
+                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                        </path>
+                    </svg>
+                </button>
+
+                <!-- Apply Smooth Button -->
+                <button class="apply-btn" onclick="applySmoothingToRaw()"
+                    title="Apply smoothed signal as new raw signal">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </button>
+
+                <button class="peak-btn ml-5" onclick="openModal('peakModal')" title="Peak Finder Tool">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 20h18L12 4z" />
+                    </svg>
+                </button>
+                <!-- Histogram Button -->
+                <button class="histo-btn ml-5" onclick="runHistogramAnalysis(true)"
+                    title="Histogram & Gaussian Analysis">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 20V10M12 20V4M6 20v-6" />
+                    </svg>
+                </button>
+
+                <div id="sgSettingsPanel" class="sg-settings">
+                    <div class="input-group">
+                        <span class="input-label">Filter N</span>
+                        <input type="number" id="sgWindowInput" value="11" step="2" min="3" class="input-mini">
+                    </div>
+                    <div class="input-group">
+                        <span class="input-label">Poly P</span>
+                        <input type="number" id="sgOrderInput" value="2" step="1" min="1" max="5" class="input-mini">
+                    </div>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+            <button id="derivToggleBtn" onclick="toggleDerivative()" title="Show/Hide Derivative Chart (d/dx)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 3v18h18" />
+                    <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
+                </svg>
+                dx
+            </button>
+            <div class="divider"></div>
+            <button onclick="prevWindow()" title="Prev">&lt;</button>
+            <button onclick="nextWindow()" title="Next">&gt;</button>
+        </div>
+
+        <!-- Theme Toggle -->
+        <div class="divider"></div>
+        <button class="theme-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+            <svg id="iconSun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" class="hidden">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+            <svg id="iconMoon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+        </button>
+
+        <!-- Dynamic Class Selector -->
+        <div class="label-palette">
+            <label class="checkbox-wrapper" title="Snap to nearby labels automatically">
+                <input type="checkbox" id="snapCheckbox" checked> Snap
+            </label>
+            <div class="divider divider-sm"></div>
+
+            <select id="classSelect" class="class-dropdown" onchange="setLabelType(parseInt(this.value))"
+                style="max-width: 150px;">
+                <!-- Populated by JS -->
+            </select>
+            <button class="class-btn" onclick="setLabelType(0)" id="btn-0" title="Eraser (0)">
+                <span class="dot eraser-dot"></span>
+            </button>
+            <button class="edit-classes-btn" onclick="openClassManager()" title="Edit Classes">✎</button>
+        </div>
+        <button class="btn-primary" onclick="openModal('exportModal')">Export</button>
+    </header>
+
+    <div id="chart-container">
+        <div id="chart" class="chart-wrapper"></div>
+        <div id="derivative-chart" class="chart-wrapper"></div>
+    </div>
+
+    <div class="playback-bar">
+        <button id="playPauseBtn" onclick="togglePlay()" class="flex-center w-auto">
+            <span id="playIcon">▶</span><span id="pauseIcon" class="hidden">❚❚</span>
+        </button>
+        <input type="range" id="timeSlider" min="0" value="0" step="1" oninput="handleSliderInput()">
+        <div class="input-group">
+            <span class="input-label">FPS</span>
+            <input type="number" id="speedInput" value="20" step="5" min="1" max="120" class="input-small"
+                title="Frames Per Second">
+        </div>
+        <div class="input-group ml-10">
+            <span class="input-label">Offset</span>
+            <input type="number" id="offsetInput" value="0" min="0" class="input-large">
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="file-status">No file loaded</span>
+        <span id="window-status">Window: 0 - 0</span>
+        <span id="active-tool-status" class="status-accent">Active Tool: Rise (1)</span>
+    </div>
+
+    <!-- New Peak Analysis Panel -->
+    <div id="analysis-panel">
+        <div class="analysis-header" onclick="toggleAnalysisPanel()">
+            <h4>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                    </path>
+                </svg>
+                Peak Analysis Table
+            </h4>
+            <div class="flex-center">
+                <span id="peak-count" class="peak-count-label">0 peaks found</span>
+                <button class="modal-btn btn-xs-outlined btn-xs-histo" onclick="showPeakDistributions(event)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 20V10M12 20V4M6 20v-6" />
+                    </svg>
+                    Distributions
+                </button>
+                <button class="modal-btn btn-xs-outlined btn-xs-peak" onclick="updatePeakAnalysis(event)">Refresh
+                    Analysis</button>
+                <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M6 9l6 6 6-6" />
+                </svg>
+            </div>
+        </div>
+        <div class="analysis-content">
+            <div class="analysis-table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th onclick="sortAnalysisTable('id')">ID <span id="sort-id" class="sort-icon"></span></th>
+                            <th onclick="sortAnalysisTable('label')">Class <span id="sort-label"
+                                    class="sort-icon"></span></th>
+                            <th onclick="sortAnalysisTable('start')">Start <span id="sort-start"
+                                    class="sort-icon"></span></th>
+                            <th onclick="sortAnalysisTable('end')">End <span id="sort-end" class="sort-icon"></span>
+                            </th>
+                            <th onclick="sortAnalysisTable('width')">Width (N) <span id="sort-width"
+                                    class="sort-icon"></span></th>
+                            <th onclick="sortAnalysisTable('maxVal')">Max Voltage <span id="sort-maxVal"
+                                    class="sort-icon"></span></th>
+                            <th onclick="sortAnalysisTable('area')">Area (V·s) <span id="sort-area"
+                                    class="sort-icon"></span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="analysisTableBody">
+                        <tr>
+                            <td colspan="7" class="table-empty-msg">Load labels to see analysis.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core Scripts -->
+    <script src="js/core/state.js"></script>
+    <script src="js/core/class_manager.js"></script>
+    <script src="js/core/signal_ops.js"></script>
+    <script src="js/core/events.js"></script>
+    <script src="js/core/utils.js"></script>
+
+    <!-- UI & Charts -->
+    <script src="js/ui/ui.js"></script>
+    <script src="js/ui/navigation.js"></script>
+    <script src="js/ui/class_ui.js"></script>
+    <script src="js/ui/analysis_ui.js"></script>
+    <script src="js/ui/charts.js"></script>
+
+    <!-- Analysis -->
+    <script src="js/analysis/filters.js"></script>
+    <script src="js/analysis/peaks.js"></script>
+    <script src="js/analysis/histogram.js"></script>
+
+    <!-- IO -->
+    <script src="js/io/export.js"></script>
+    <script src="js/io/loader.js"></script>
+
+    <!-- Main Entry Point -->
+    <script src="js/main.js"></script>
+</body>
+
+</html>
