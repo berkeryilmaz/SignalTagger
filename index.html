@@ -19,6 +19,11 @@
     <script src="https://code.highcharts.com/modules/histogram-bellcurve.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
+    <!-- DataTables & jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -530,6 +535,7 @@
     </div>
 
     <!-- New Peak Analysis Panel -->
+    <div id="panel-resizer" title="Drag to resize"></div>
     <div id="analysis-panel">
         <div class="analysis-header" onclick="toggleAnalysisPanel()">
             <h4>
@@ -558,24 +564,17 @@
         </div>
         <div class="analysis-content">
             <div class="analysis-table-container">
-                <table class="data-table">
+                <table class="data-table" id="analysisTable">
                     <thead>
                         <tr>
-                            <th onclick="sortAnalysisTable('id')">ID <span id="sort-id" class="sort-icon"></span></th>
-                            <th onclick="sortAnalysisTable('label')">Class <span id="sort-label"
-                                    class="sort-icon"></span></th>
-                            <th onclick="sortAnalysisTable('start')">Start <span id="sort-start"
-                                    class="sort-icon"></span></th>
-                            <th onclick="sortAnalysisTable('end')">End <span id="sort-end" class="sort-icon"></span>
-                            </th>
-                            <th onclick="sortAnalysisTable('width')">Width (N) <span id="sort-width"
-                                    class="sort-icon"></span></th>
-                            <th onclick="sortAnalysisTable('fwhm')">FWHM (Samples) <span id="sort-fwhm"
-                                    class="sort-icon"></span></th>
-                            <th onclick="sortAnalysisTable('maxVal')">Max Voltage <span id="sort-maxVal"
-                                    class="sort-icon"></span></th>
-                            <th onclick="sortAnalysisTable('area')">Area (V·s) <span id="sort-area"
-                                    class="sort-icon"></span></th>
+                            <th>ID</th>
+                            <th>Class</th>
+                            <th>Start</th>
+                            <th>End</th>
+                            <th>Width (N)</th>
+                            <th>FWHM (Samples)</th>
+                            <th>Max Voltage</th>
+                            <th>Area (V·s)</th>
                         </tr>
                     </thead>
                     <tbody id="analysisTableBody">

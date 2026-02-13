@@ -2,74 +2,78 @@
 
 // UI: Analysis & Charts
 
-let currentSortCol = "id";
-let currentSortDir = 1;
-
-function sortAnalysisTable(col) {
-    if (currentSortCol === col) {
-        currentSortDir *= -1;
-    } else {
-        currentSortCol = col;
-        currentSortDir = 1;
-    }
-    renderAnalysisTable();
-}
+// Global variables for sorting are no longer needed with DataTables
 
 function renderAnalysisTable() {
     let tableBody = document.getElementById("analysisTableBody");
     if (!tableBody) return;
 
     if (!window.analysisData || window.analysisData.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="7" class="table-empty-msg">No labeled regions found. Use "Manage Classes" to add labels.</td></tr>`;
+        // DataTables doesn't like empty bodies on init if we want to add data later easily, 
+        // but let's clear it.
+        if ($.fn.DataTable.isDataTable('#analysisTable')) {
+            $('#analysisTable').DataTable().clear().draw();
+        } else {
+            tableBody.innerHTML = `<tr><td colspan="8" class="table-empty-msg">No labeled regions found. Use "Manage Classes" to add labels.</td></tr>`;
+        }
         return;
     }
 
-    // Sort if needed
-    if (typeof currentSortCol !== 'undefined' && currentSortCol) {
-        window.analysisData.sort((a, b) => {
-            let valA = a[currentSortCol];
-            let valB = b[currentSortCol];
-            return currentSortDir === 1 ? (valA - valB) : (valB - valA);
-        });
-    }
-
-    // Clear and Rebuild
-    tableBody.innerHTML = "";
-    window.analysisData.forEach(row => {
-        let tr = document.createElement("tr");
-
-        // Get class name if possible
+    // Prepare data for DataTables
+    const tableData = window.analysisData.map(row => {
         let className = row.label;
         if (state.labelTypes && state.labelTypes[row.label]) {
             className = `${row.label} (${state.labelTypes[row.label].name})`;
         }
-
-        tr.innerHTML = `
-            <td>#${row.id}</td>
-            <td>${className}</td>
-            <td>${row.start}</td>
-            <td>${row.end}</td>
-            <td>${row.width}</td>
-            <td>${row.fwhm}</td>
-            <td class="text-peak-color">${row.maxVal}</td>
-            <td>${row.area}</td>
-        `;
-
-        tr.onclick = () => {
-            document.querySelectorAll("#analysisTableBody tr").forEach(r => r.classList.remove("selected"));
-            tr.classList.add("selected");
-            if (window.jumpToCallback) window.jumpToCallback(row.start, row.end);
+        return {
+            id: row.id,
+            className: className,
+            start: row.start,
+            end: row.end,
+            width: row.width,
+            fwhm: row.fwhm,
+            maxVal: row.maxVal,
+            area: row.area,
+            rawLabel: row.label, // for coloring or other needs
+            DT_RowId: `row_${row.id}` // helps with selection
         };
-
-        tableBody.appendChild(tr);
     });
 
-    // Update sort icons
-    document.querySelectorAll(".sort-icon").forEach(el => el.textContent = "");
-    if (typeof currentSortCol !== 'undefined' && currentSortCol) {
-        let icon = currentSortDir === 1 ? "▲" : "▼";
-        const th = document.getElementById(`sort-${currentSortCol}`);
-        if (th) th.textContent = icon;
+    if ($.fn.DataTable.isDataTable('#analysisTable')) {
+        let dt = $('#analysisTable').DataTable();
+        dt.clear();
+        dt.rows.add(tableData);
+        dt.draw();
+    } else {
+        // Initialize
+        $('#analysisTable').DataTable({
+            data: tableData,
+            columns: [
+                { data: 'id', title: 'ID' },
+                { data: 'className', title: 'Class' },
+                { data: 'start', title: 'Start' },
+                { data: 'end', title: 'End' },
+                { data: 'width', title: 'Width (N)' },
+                { data: 'fwhm', title: 'FWHM' },
+                { data: 'maxVal', title: 'Max Voltage', className: 'text-peak-color' },
+                { data: 'area', title: 'Area (V·s)' }
+            ],
+            paging: false,       // Disable paging to show all rows in scrollable area
+            scrollY: 'calc(100% - 40px)', // Fill container minus header height
+            scrollCollapse: true,
+            searching: false,
+            ordering: true,
+            info: true,
+            autoWidth: false,
+            // Theme integration
+            createdRow: function (row, data, dataIndex) {
+                $(row).on('click', function () {
+                    $('#analysisTableBody tr').removeClass('selected');
+                    $(this).addClass('selected');
+                    if (window.jumpToCallback) window.jumpToCallback(data.start, data.end);
+                });
+            }
+        });
     }
 }
 
@@ -123,5 +127,5 @@ function showPeakDistributions(e) {
 // Global exposure
 // Global exposure
 window.renderAnalysisTable = renderAnalysisTable;
-window.sortAnalysisTable = sortAnalysisTable;
+window.renderAnalysisTable = renderAnalysisTable;
 window.showPeakDistributions = showPeakDistributions;
