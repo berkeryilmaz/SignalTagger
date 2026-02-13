@@ -211,6 +211,9 @@ function updateSingleDistChart(type) {
     if (type === 'width') {
         data = analysisData.map(d => d.width);
         containerId = 'distChartWidth'; title = 'Width Distribution'; xTitle = 'Samples'; color = '#00e676'; binInputId = 'binsWidth';
+    } else if (type === 'fwhm') {
+        data = analysisData.map(d => d.fwhm);
+        containerId = 'distChartFWHM'; title = 'FWHM Distribution'; xTitle = 'Samples'; color = '#00bcd4'; binInputId = 'binsFWHM';
     } else if (type === 'voltage') {
         data = analysisData.map(d => d.maxVal);
         containerId = 'distChartVoltage'; title = 'Max Voltage Distribution'; xTitle = 'Volts'; color = '#e03f6f'; binInputId = 'binsVoltage';

@@ -42,12 +42,55 @@ function updatePeakAnalysis(e) {
     regions.forEach((r, index) => {
         let width = r.end - r.start + 1;
         let maxVal = -Infinity;
+        let maxIndex = -1;
         let area = 0;
 
         for (let j = r.start; j <= r.end; j++) {
             let val = data[j];
-            if (val > maxVal) maxVal = val;
+            if (val > maxVal) {
+                maxVal = val;
+                maxIndex = j;
+            }
             area += (val - base);
+        }
+
+        // FWHM Calculation
+        let fwhm = 0;
+        if (maxIndex !== -1) {
+            let halfMax = (maxVal - base) / 2 + base;
+
+            // Find left crossing
+            let leftIdx = maxIndex;
+            while (leftIdx > r.start && data[leftIdx] > halfMax) {
+                leftIdx--;
+            }
+            // Linear interpolate left
+            let fwhmStart = leftIdx;
+            if (data[leftIdx] <= halfMax && data[leftIdx + 1] > halfMax) {
+                let v1 = data[leftIdx];
+                let v2 = data[leftIdx + 1];
+                fwhmStart = leftIdx + (halfMax - v1) / (v2 - v1);
+            }
+
+            // Find right crossing
+            let rightIdx = maxIndex;
+            while (rightIdx < r.end && data[rightIdx] > halfMax) {
+                rightIdx++;
+            }
+            // Linear interpolate right
+            let fwhmEnd = rightIdx;
+            if (data[rightIdx] <= halfMax && data[rightIdx - 1] > halfMax) {
+                let v1 = data[rightIdx - 1]; // higher
+                let v2 = data[rightIdx];     // lower
+                // Interpolate between rightIdx-1 and rightIdx
+                // x = (y - y1) / (y2 - y1) + x1
+                // Here x1 = rightIdx-1, x2 = rightIdx
+                // fwhmEnd = (rightIdx - 1) + (halfMax - v1) / (v2 - v1);
+                fwhmEnd = (rightIdx - 1) + (halfMax - v1) / (v2 - v1);
+            }
+
+            fwhm = fwhmEnd - fwhmStart;
+            if (fwhm < 0) fwhm = 0;
         }
 
         window.analysisData.push({
@@ -56,6 +99,7 @@ function updatePeakAnalysis(e) {
             start: r.start,
             end: r.end,
             width: width,
+            fwhm: roundToPrecision(fwhm),
             maxVal: roundToPrecision(maxVal),
             area: roundToPrecision(area)
         });

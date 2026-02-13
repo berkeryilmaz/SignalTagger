@@ -1,5 +1,20 @@
 // UI: Analysis & Charts
 
+// UI: Analysis & Charts
+
+let currentSortCol = "id";
+let currentSortDir = 1;
+
+function sortAnalysisTable(col) {
+    if (currentSortCol === col) {
+        currentSortDir *= -1;
+    } else {
+        currentSortCol = col;
+        currentSortDir = 1;
+    }
+    renderAnalysisTable();
+}
+
 function renderAnalysisTable() {
     let tableBody = document.getElementById("analysisTableBody");
     if (!tableBody) return;
@@ -35,6 +50,7 @@ function renderAnalysisTable() {
             <td>${row.start}</td>
             <td>${row.end}</td>
             <td>${row.width}</td>
+            <td>${row.fwhm}</td>
             <td class="text-peak-color">${row.maxVal}</td>
             <td>${row.area}</td>
         `;
@@ -75,6 +91,7 @@ function showPeakDistributions(e) {
         // Defines
         const types = [
             { key: 'width', inputId: 'binsWidth', dataFn: d => d.width },
+            { key: 'fwhm', inputId: 'binsFWHM', dataFn: d => d.fwhm },
             { key: 'voltage', inputId: 'binsVoltage', dataFn: d => d.maxVal },
             { key: 'area', inputId: 'binsArea', dataFn: d => d.area }
         ];
@@ -104,5 +121,7 @@ function showPeakDistributions(e) {
 }
 
 // Global exposure
+// Global exposure
 window.renderAnalysisTable = renderAnalysisTable;
+window.sortAnalysisTable = sortAnalysisTable;
 window.showPeakDistributions = showPeakDistributions;
