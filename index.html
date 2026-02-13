@@ -214,6 +214,19 @@
                     <div id="distChartWidth" class="chart-flex"></div>
                 </div>
 
+                <!-- FWHM Chart -->
+                <div class="dist-chart-card">
+                    <div class="chart-header">
+                        <h5>FWHM Distribution</h5>
+                        <div class="flex-gap-5">
+                            <span class="input-label m-0">Bins</span>
+                            <input type="number" id="binsFWHM" min="5" max="500" step="1"
+                                class="input-dist-bins input-dist-fwhm" onchange="updateSingleDistChart('fwhm')">
+                        </div>
+                    </div>
+                    <div id="distChartFWHM" class="chart-flex"></div>
+                </div>
+
                 <!-- Voltage Chart -->
                 <div class="dist-chart-card">
                     <div class="chart-header">
@@ -556,6 +569,8 @@
                             <th onclick="sortAnalysisTable('end')">End <span id="sort-end" class="sort-icon"></span>
                             </th>
                             <th onclick="sortAnalysisTable('width')">Width (N) <span id="sort-width"
+                                    class="sort-icon"></span></th>
+                            <th onclick="sortAnalysisTable('fwhm')">FWHM (Samples) <span id="sort-fwhm"
                                     class="sort-icon"></span></th>
                             <th onclick="sortAnalysisTable('maxVal')">Max Voltage <span id="sort-maxVal"
                                     class="sort-icon"></span></th>
