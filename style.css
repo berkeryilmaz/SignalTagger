@@ -812,105 +812,116 @@ table.data-table tr.selected {
     width: 40px;
     height: 40px;
     -webkit-animation: spin 1s linear infinite;
-
-    /* DataTables Overrides for Dark Theme */
-    .dataTables_wrapper {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.85rem;
-        color: var(--text-main);
-        padding: 10px;
-    }
-
-    .dataTables_wrapper .dataTables_length,
-    .dataTables_wrapper .dataTables_filter,
-    .dataTables_wrapper .dataTables_info,
-    .dataTables_wrapper .dataTables_processing,
-    .dataTables_wrapper .dataTables_paginate {
-        color: var(--text-muted) !important;
-    }
-
-    .dataTables_wrapper .dataTables_length select {
-        background-color: var(--input-bg);
-        border: 1px solid var(--border-color);
-        color: var(--text-main);
-        padding: 2px;
-        border-radius: 4px;
-    }
-
-    .dataTables_wrapper .dataTables_filter input {
-        background-color: var(--input-bg);
-        border: 1px solid var(--border-color);
-        color: var(--text-main);
-        padding: 4px;
-        border-radius: 4px;
-        margin-left: 5px;
-    }
-
-    table.dataTable {
-        background-color: transparent !important;
-        border-collapse: collapse !important;
-        width: 100% !important;
-    }
-
-    table.dataTable thead th {
-        background-color: var(--table-header-bg);
-        color: var(--text-muted);
-        border-bottom: 1px solid var(--border-color) !important;
-        padding: 8px 12px;
-    }
-
-    table.dataTable tbody td {
-        background-color: transparent !important;
-        border-bottom: 1px solid var(--border-color) !important;
-        color: var(--text-main);
-        padding: 6px 12px;
-    }
-
-    table.dataTable tbody tr {
-        background-color: transparent !important;
-    }
-
-    table.dataTable tbody tr:hover {
-        background-color: var(--table-row-hover) !important;
-        cursor: pointer;
-    }
-
-    table.dataTable tbody tr.selected {
-        background-color: rgba(255, 64, 129, 0.15) !important;
-        border-left: 3px solid var(--peak-color);
-    }
-
-    /* Pagination Buttons */
-    .dataTables_wrapper .dataTables_paginate .paginate_button {
-        color: var(--text-muted) !important;
-        border: 1px solid transparent !important;
-        border-radius: 4px;
-    }
-
-    .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
-        background: var(--table-row-hover) !important;
-        color: var(--text-main) !important;
-        border: 1px solid var(--border-color) !important;
-    }
-
-    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
-    .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
-        background: var(--accent-color) !important;
-        color: white !important;
-        border: 1px solid var(--accent-color) !important;
-    }
-
-    /* Light Theme Adjustments */
-    [data-theme="light"] .dataTables_wrapper .dataTables_length,
-    [data-theme="light"] .dataTables_wrapper .dataTables_filter,
-    [data-theme="light"] .dataTables_wrapper .dataTables_info,
-    [data-theme="light"] .dataTables_wrapper .dataTables_processing,
-    [data-theme="light"] .dataTables_wrapper .dataTables_paginate {
-        color: var(--text-muted) !important;
-    }
-
     margin-bottom: 20px;
 }
+
+/* DataTables Overrides for Dark Theme */
+.dataTables_wrapper {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    /* Slightly smaller font for compactness */
+    color: var(--text-main);
+    padding: 5px 10px;
+    /* Reduced padding */
+}
+
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_processing,
+.dataTables_wrapper .dataTables_paginate {
+    color: var(--text-muted) !important;
+    font-size: 0.75rem;
+    /* Smaller text for controls */
+}
+
+.dataTables_wrapper .dataTables_length select {
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 1px;
+    border-radius: 4px;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 2px;
+    border-radius: 4px;
+    margin-left: 5px;
+}
+
+table.dataTable {
+    background-color: transparent !important;
+    border-collapse: collapse !important;
+    width: 100% !important;
+    margin-bottom: 5px !important;
+    /* Reduce gap */
+}
+
+table.dataTable thead th {
+    background-color: var(--table-header-bg);
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color) !important;
+    padding: 6px 10px;
+    /* Compact header */
+}
+
+table.dataTable tbody td {
+    background-color: transparent !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    color: var(--text-main);
+    padding: 4px 10px;
+    /* Compact rows */
+}
+
+table.dataTable tbody tr {
+    background-color: transparent !important;
+}
+
+table.dataTable tbody tr:hover {
+    background-color: var(--table-row-hover) !important;
+    cursor: pointer;
+}
+
+table.dataTable tbody tr.selected {
+    background-color: rgba(255, 64, 129, 0.15) !important;
+    border-left: 3px solid var(--peak-color);
+}
+
+/* Pagination Buttons */
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+    color: var(--text-muted) !important;
+    border: 1px solid transparent !important;
+    border-radius: 4px;
+    padding: 0.1em 0.5em !important;
+    /* Compact buttons */
+    margin: 0 2px;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    background: var(--table-row-hover) !important;
+    color: var(--text-main) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current,
+.dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+    background: var(--accent-color) !important;
+    color: white !important;
+    border: 1px solid var(--accent-color) !important;
+}
+
+/* Light Theme Adjustments */
+[data-theme="light"] .dataTables_wrapper .dataTables_length,
+[data-theme="light"] .dataTables_wrapper .dataTables_filter,
+[data-theme="light"] .dataTables_wrapper .dataTables_info,
+[data-theme="light"] .dataTables_wrapper .dataTables_processing,
+[data-theme="light"] .dataTables_wrapper .dataTables_paginate {
+    color: var(--text-muted) !important;
+}
+
 
 /* Safari */
 @-webkit-keyframes spin {

@@ -58,8 +58,11 @@ function renderAnalysisTable() {
                 { data: 'maxVal', title: 'Max Voltage', className: 'text-peak-color' },
                 { data: 'area', title: 'Area (V·s)' }
             ],
-            paging: false,       // Disable paging to show all rows in scrollable area
-            scrollY: 'calc(100% - 40px)', // Fill container minus header height
+            paging: true,
+            pageLength: 5,
+            lengthMenu: [5, 10, 20, 50],
+            lengthChange: true,
+            scrollY: false, // Let pagination control height
             scrollCollapse: true,
             searching: false,
             ordering: true,
