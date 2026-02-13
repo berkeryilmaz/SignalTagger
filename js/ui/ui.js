@@ -147,3 +147,56 @@ if (savedScale) {
 }
 
 window.updateUIScale = updateUIScale;
+
+// --- Panel Resizing ---
+(function () {
+    const resizer = document.getElementById("panel-resizer");
+    const panel = document.getElementById("analysis-panel");
+    const tableContainer = document.querySelector(".analysis-table-container"); // To adjust table height
+    if (!resizer || !panel) return;
+
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    resizer.addEventListener("mousedown", (e) => {
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = panel.getBoundingClientRect().height;
+        resizer.classList.add("resizing");
+        document.body.style.cursor = "ns-resize";
+        e.preventDefault();
+    });
+
+    window.addEventListener("mousemove", (e) => {
+        if (!isResizing) return;
+        const deltaY = startY - e.clientY;
+        let newHeight = startHeight + deltaY;
+
+        // Limits
+        if (newHeight < 35) newHeight = 35; // Collapsed header height
+        if (newHeight > window.innerHeight - 100) newHeight = window.innerHeight - 100;
+
+        panel.style.height = `${newHeight}px`;
+
+        // If strict DataTables adjustment is needed, we can do it here or via resize observer.
+        // DataTables with scrollY usually handles container resize if set to relative units, 
+        // but we might need to trigger a redraw if it doesn't fit perfectly.
+        // For now, let CSS flex handle the container size.
+    });
+
+    window.addEventListener("mouseup", () => {
+        if (isResizing) {
+            isResizing = false;
+            resizer.classList.remove("resizing");
+            document.body.style.cursor = "";
+            // Trigger resize for charts/tables
+            window.dispatchEvent(new Event('resize'));
+
+            // Re-adjust DataTables scrollHeight if needed
+            if ($.fn.DataTable.isDataTable('#analysisTable')) {
+                $('#analysisTable').DataTable().columns.adjust().draw();
+            }
+        }
+    });
+})();
