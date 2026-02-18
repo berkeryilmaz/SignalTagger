@@ -8,6 +8,7 @@ const state = {
     rawDerivativeSignal: null,
     smoothDerivativeSignal: null,
     referenceSignals: [],
+    scopeMetadata: null,
 
     // Configuration
     dataPrecision: 3,

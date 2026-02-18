@@ -310,6 +310,69 @@
         </div>
     </div>
 
+    <!-- Oscilloscope Config Modal -->
+    <div id="oscilloscopeModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">Oscilloscope Configuration</h3>
+            <div id="oscilloscopeConfigContent" class="config-content">
+                <!-- Populated by JS -->
+            </div>
+            <button class="btn-text-only" onclick="closeModal('oscilloscopeModal')">Close</button>
+        </div>
+    </div>
+
+    <!-- Dedicated Scope Screen Modal -->
+    <div id="scopeScreenModal" class="modal-overlay">
+        <div class="modal modal-xl"
+            style="width: auto; height: auto; max-width: 95vw; max-height: 95vh; display:flex; flex-direction:column; background: #252525; border: 1px solid #333;">
+            <div class="modal-header"
+                style="justify-content: space-between; align-items: center; display: flex; width: 100%; box-sizing: border-box;">
+                <h3 class="modal-title" style="margin:0;">Oscilloscope Screen</h3>
+                <div>
+                    <span id="scopeScaleInfo" style="margin-right: 15px; font-family: monospace;"></span>
+                    <button id="scopePlayBtn" class="btn-text-only" style="margin-right: 10px;" onclick="togglePlay()">
+                        <span id="scopePlayIcon">▶</span>
+                        <span id="scopePauseIcon" style="display:none;">❚❚</span>
+                    </button>
+                    <button class="btn-text-only" onclick="closeModal('scopeScreenModal')">Close</button>
+                </div>
+            </div>
+
+            <!-- 
+                Aspect Ratio 1.52 (15.2 / 10). 
+                Height is limited by screen height minus header (~50px) and margins.
+                Width is calculated from height * 1.52.
+                Max Width is 90vw.
+            -->
+            <div id="scopeScreenContainer" style="
+                    aspect-ratio: 1.52; 
+                    height: min(85vh, 90vw / 1.52); 
+                    width: calc(min(85vh, 90vw / 1.52) * 1.52);
+                    position: relative; 
+                    background: #000; 
+                    border: 2px solid #555; 
+                    border-radius: 4px; 
+                    overflow: hidden;
+                    margin: 0 auto;
+                ">
+                <!-- Chart -->
+                <div id="scopeScreenChart" style="width: 100%; height: 100%;"></div>
+
+                <!-- On-Screen Display (OSD) -->
+                <div
+                    style="position: absolute; top: 10px; left: 10px; color: #0f0; font-family: 'Courier New', monospace; font-weight: bold; pointer-events: none; z-index: 10;">
+                    <div id="osd-tl">CH1: -- V/div</div>
+                    <div id="osd-bl" style="margin-top: 5px;">Offset: -- V</div>
+                </div>
+                <div
+                    style="position: absolute; bottom: 10px; right: 10px; color: #0f0; font-family: 'Courier New', monospace; font-weight: bold; pointer-events: none; z-index: 10; text-align: right;">
+                    <div id="osd-br">Time: -- s/div</div>
+                    <div id="osd-tr" style="margin-bottom: 5px;">-- pts</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <header>
         <div class="brand">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -320,15 +383,25 @@
         </div>
         <div class="toolbar">
             <!-- Load Main Signal -->
-            <label for="fileInput" class="file-upload-label">Load CSV</label>
-            <input type="file" id="fileInput" accept=".csv">
+            <label for="fileInput" class="file-upload-label">Load File</label>
+            <input type="file" id="fileInput" accept=".csv,.bin" multiple>
 
             <!-- Add Reference Signal -->
             <label for="refInput" class="file-upload-label ref-btn" title="Add another signal for comparison">Add Ref
                 (+)</label>
-            <input type="file" id="refInput" accept=".csv" onchange="loadReferenceCSV(this)">
+            <input type="file" id="refInput" accept=".csv,.bin" multiple onchange="loadReference(this)">
             <button class="ref-btn btn-sm-add" onclick="clearReferences()"
                 title="Clear all reference signals">×</button>
+
+            <!-- Oscilloscope Info Button (Hidden by default) -->
+            <button id="oscilloscopeInfoBtn" class="btn-icon hidden" onclick="openModal('oscilloscopeModal')"
+                title="Oscilloscope Settings">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                </svg>
+            </button>
 
             <!-- Settings Button -->
             <button class="btn-icon" onclick="openModal('settingsModal')" title="Settings">
@@ -337,6 +410,16 @@
                     <path
                         d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z">
                     </path>
+                </svg>
+            </button>
+
+            <!-- Open Scope Screen Modal -->
+            <button class="btn-icon" onclick="openScopeScreen()" title="Open Dedicated Scope Screen">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                    </path>
+                    <circle cx="12" cy="12" r="3"></circle>
                 </svg>
             </button>
 
@@ -608,6 +691,8 @@
 
     <!-- IO -->
     <script src="js/io/export.js"></script>
+    <script src="js/io/export.js"></script>
+    <script src="js/io/bin_loader.js"></script>
     <script src="js/io/loader.js"></script>
 
     <!-- Main Entry Point -->
