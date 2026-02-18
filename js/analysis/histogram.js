@@ -291,11 +291,13 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
         chart: {
             backgroundColor: tc.bg,
             height: 350,
-            marginBottom: 60, // Ensure space for X-axis labels
+            marginBottom: 60,
             zoomType: 'x',
             panning: true,
-            panKey: 'shift'
+            panKey: 'shift',
+            alignTicks: false
         },
+        boost: { enabled: false },
         title: { text: null },
         credits: { enabled: false },
         legend: {
@@ -307,7 +309,7 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
             layout: 'vertical',
             floating: true,
             x: -10,
-            y: 35 // Adjusted slightly
+            y: 35
         },
         xAxis: {
             title: { text: xTitle, style: { color: tc.textMuted } },
@@ -317,12 +319,15 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
         yAxis: [{
             title: { text: 'Count', style: { color: color } },
             gridLineColor: tc.grid,
-            labels: { style: { color: tc.textMuted } }
+            labels: { style: { color: tc.textMuted } },
+            allowDecimals: false,
+            min: 0
         }, {
             title: { text: 'Density', style: { color: tc.text } },
             opposite: true,
             gridLineWidth: 0,
-            labels: { enabled: false }
+            labels: { enabled: false },
+            min: 0
         }],
         series: [{
             name: 'Histogram',

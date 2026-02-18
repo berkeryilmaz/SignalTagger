@@ -119,29 +119,36 @@ class BinLoader {
 
         const channels = setup.channel || [];
 
+        let dataBlockIndex = 0;
         channels.forEach((channel, i) => {
-            if (i < indices.length) {
-                const start = indices[i] + 4; // Skip delimiter
-                // We need datalen int16s -> datalen * 2 bytes
-                const neededBytes = dataLen * 2;
+            // Only read data if channel is ON
+            if (channel.display === 'ON') {
+                if (dataBlockIndex < indices.length) {
+                    const start = indices[dataBlockIndex] + 4; // Skip delimiter
+                    dataBlockIndex++;
 
-                // Check if we have enough bytes
-                if (start + neededBytes > uint8.length) {
-                    console.warn(`Unexpected end of file for channel ${i}`);
+                    // We need datalen int16s -> datalen * 2 bytes
+                    const neededBytes = dataLen * 2;
+
+                    // Check if we have enough bytes
+                    if (start + neededBytes > uint8.length) {
+                        console.warn(`Unexpected end of file for channel ${i}`);
+                    }
+
+                    const chunkBuffer = buffer.slice(start, start + neededBytes);
+                    const int16View = new Int16Array(chunkBuffer);
+                    channel.raw_data = new Float32Array(int16View);
+
+                    channel.data = this.convertToVoltage(channel.raw_data, channel);
+                    channel.successful_read = true;
+                } else {
+                    // Defines channel as ON but no data found
+                    channel.raw_data = new Float32Array(dataLen).fill(0);
+                    channel.data = new Float32Array(dataLen).fill(0);
+                    channel.successful_read = false;
                 }
-
-                // Create a view on the existing buffer (no copy if possible, or slice)
-                // Slice is safer to avoid retaining the huge buffer if not needed, 
-                // but here binLoader is transient. 
-                // However, creating a float32 array copies anyway.
-
-                const chunkBuffer = buffer.slice(start, start + neededBytes);
-                const int16View = new Int16Array(chunkBuffer);
-                channel.raw_data = new Float32Array(int16View);
-
-                channel.data = this.convertToVoltage(channel.raw_data, channel);
-                channel.successful_read = true;
             } else {
+                // Channel is OFF, fill with zeros or ignore
                 channel.raw_data = new Float32Array(dataLen).fill(0);
                 channel.data = new Float32Array(dataLen).fill(0);
                 channel.successful_read = false;

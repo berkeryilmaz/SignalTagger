@@ -326,7 +326,7 @@ if (elements.chartContainer) {
 }
 
 window.togglePlay = togglePlay;
-window.toggleScopeView = toggleScopeView;
+// toggleScopeView removed as requested
 // renderClassButtons, setLabelType, openClassManager, addNewClass are now in js/ui/class_ui.js
 window.jumpToPeak = jumpToPeak;
 window.runSGWizard = runSGWizard;
