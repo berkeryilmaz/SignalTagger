@@ -174,6 +174,9 @@ async function loadBin(files) {
             throw new Error("No valid data found in files.");
         }
 
+        // Store for Scope Modal
+        updateState({ scopeMetadata: setup });
+
         // Find active channel
         // Python: getActiveChannel returns channels with display == 'ON'
         // We'll take the first active one, or the first one if none active
