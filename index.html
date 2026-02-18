@@ -310,6 +310,17 @@
         </div>
     </div>
 
+    <!-- Oscilloscope Config Modal -->
+    <div id="oscilloscopeModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">Oscilloscope Configuration</h3>
+            <div id="oscilloscopeConfigContent" class="config-content">
+                <!-- Populated by JS -->
+            </div>
+            <button class="btn-text-only" onclick="closeModal('oscilloscopeModal')">Close</button>
+        </div>
+    </div>
+
     <header>
         <div class="brand">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -320,15 +331,25 @@
         </div>
         <div class="toolbar">
             <!-- Load Main Signal -->
-            <label for="fileInput" class="file-upload-label">Load CSV</label>
-            <input type="file" id="fileInput" accept=".csv">
+            <label for="fileInput" class="file-upload-label">Load File</label>
+            <input type="file" id="fileInput" accept=".csv,.bin" multiple>
 
             <!-- Add Reference Signal -->
             <label for="refInput" class="file-upload-label ref-btn" title="Add another signal for comparison">Add Ref
                 (+)</label>
-            <input type="file" id="refInput" accept=".csv" onchange="loadReferenceCSV(this)">
+            <input type="file" id="refInput" accept=".csv,.bin" multiple onchange="loadReference(this)">
             <button class="ref-btn btn-sm-add" onclick="clearReferences()"
                 title="Clear all reference signals">×</button>
+
+            <!-- Oscilloscope Info Button (Hidden by default) -->
+            <button id="oscilloscopeInfoBtn" class="btn-icon hidden" onclick="openModal('oscilloscopeModal')"
+                title="Oscilloscope Settings">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                </svg>
+            </button>
 
             <!-- Settings Button -->
             <button class="btn-icon" onclick="openModal('settingsModal')" title="Settings">
@@ -608,6 +629,8 @@
 
     <!-- IO -->
     <script src="js/io/export.js"></script>
+    <script src="js/io/export.js"></script>
+    <script src="js/io/bin_loader.js"></script>
     <script src="js/io/loader.js"></script>
 
     <!-- Main Entry Point -->
