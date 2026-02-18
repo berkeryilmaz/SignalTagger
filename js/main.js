@@ -29,10 +29,14 @@ function togglePlay() {
     state.isPlaying = !state.isPlaying;
     const playIcon = document.getElementById("playIcon");
     const pauseIcon = document.getElementById("pauseIcon");
+    const scopePlay = document.getElementById("scopePlayIcon");
+    const scopePause = document.getElementById("scopePauseIcon");
 
     if (state.isPlaying) {
         if (playIcon) playIcon.style.display = "none";
         if (pauseIcon) pauseIcon.style.display = "inline";
+        if (scopePlay) scopePlay.style.display = "none";
+        if (scopePause) scopePause.style.display = "inline";
 
         if (state.playInterval) clearInterval(state.playInterval);
 
@@ -66,10 +70,23 @@ function togglePlay() {
     } else {
         if (playIcon) playIcon.style.display = "inline";
         if (pauseIcon) pauseIcon.style.display = "none";
+        if (scopePlay) scopePlay.style.display = "inline";
+        if (scopePause) scopePause.style.display = "none";
         clearInterval(state.playInterval);
         document.getElementById("speedInput").onchange = null; // Clean up listener
     }
 }
+
+function openScopeScreen() {
+    openModal('scopeScreenModal');
+    // Trigger resize to ensure Highcharts fits the modal
+    setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        if (window.drawScopeScreen) window.drawScopeScreen();
+    }, 100);
+}
+
+window.openScopeScreen = openScopeScreen;
 
 // Class Management moved to ui/class_ui.js
 
@@ -309,6 +326,7 @@ if (elements.chartContainer) {
 }
 
 window.togglePlay = togglePlay;
+window.toggleScopeView = toggleScopeView;
 // renderClassButtons, setLabelType, openClassManager, addNewClass are now in js/ui/class_ui.js
 window.jumpToPeak = jumpToPeak;
 window.runSGWizard = runSGWizard;
