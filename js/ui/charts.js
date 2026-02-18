@@ -41,7 +41,6 @@ function draw(preserveWindow = false) {
     const tc = getThemeColors();
 
     let seriesList = [];
-
     state.referenceSignals.forEach((ref, idx) => {
         let refSlice = [];
         for (let i = startIdx; i < endIdx; i++) {
@@ -54,7 +53,8 @@ function draw(preserveWindow = false) {
             lineWidth: 1,
             dashStyle: 'Dash',
             opacity: 0.7,
-            enableMouseTracking: false
+            enableMouseTracking: false,
+            pointStart: startIdx
         });
     });
 
@@ -64,7 +64,8 @@ function draw(preserveWindow = false) {
         color: state.isSmoothEnabled ? '#ccc' : tc.accentColor || '#00bcd4',
         lineWidth: state.isSmoothEnabled ? 1 : 2,
         opacity: state.isSmoothEnabled ? 0.5 : 1,
-        zIndex: 2
+        zIndex: 2,
+        pointStart: startIdx
     });
 
     if (state.isSmoothEnabled) {
@@ -73,7 +74,8 @@ function draw(preserveWindow = false) {
             data: smoothData,
             color: tc.smoothColor,
             lineWidth: 2,
-            zIndex: 3
+            zIndex: 3,
+            pointStart: startIdx
         });
     }
 
@@ -100,8 +102,8 @@ function draw(preserveWindow = false) {
             if (l !== currentBandType) {
                 if (currentBandType !== 0 && currentBandStart !== -1) {
                     plotBands.push({
-                        from: currentBandStart - startIdx,
-                        to: i - startIdx - 1,
+                        from: currentBandStart,
+                        to: i - 1,
                         color: state.labelTypes[currentBandType].color,
                         className: `label-band-${currentBandType}`
                     });
@@ -112,8 +114,8 @@ function draw(preserveWindow = false) {
         }
         if (currentBandType !== 0 && currentBandStart !== -1) {
             plotBands.push({
-                from: currentBandStart - startIdx,
-                to: endIdx - 1 - startIdx,
+                from: currentBandStart,
+                to: endIdx - 1,
                 color: state.labelTypes[currentBandType].color
             });
         }
@@ -133,7 +135,7 @@ function draw(preserveWindow = false) {
                 selection: function (e) {
                     if (e.xAxis) {
                         if (window.markRange) {
-                            window.markRange(Math.floor(e.xAxis[0].min) + startIdx, Math.floor(e.xAxis[0].max) + startIdx);
+                            window.markRange(Math.floor(e.xAxis[0].min), Math.floor(e.xAxis[0].max));
                         }
                         e.preventDefault();
                     }
@@ -143,11 +145,10 @@ function draw(preserveWindow = false) {
         title: { text: undefined },
         boost: { useGPUTranslations: true, usePreallocated: true },
         xAxis: {
-            categories: Array.from({ length: endIdx - startIdx }, (_, i) => startIdx + i),
-            min: 0,
-            max: endIdx - startIdx - 1,
+            min: startIdx,
+            max: endIdx - 1,
             labels: {
-                formatter: function () { return this.value + startIdx; },
+                formatter: function () { return this.value; },
                 style: { color: tc.textMuted }
             },
             gridLineWidth: 1,
@@ -156,8 +157,10 @@ function draw(preserveWindow = false) {
             tickColor: tc.axisLine,
             plotBands: plotBands,
             tickInterval: undefined,
-            startOnTick: true,
-            endOnTick: true
+            startOnTick: false,
+            endOnTick: false,
+            minPadding: 0,
+            maxPadding: 0
         },
         yAxis: {
             title: { text: 'Voltage', style: { color: tc.textMuted } },
@@ -176,7 +179,7 @@ function draw(preserveWindow = false) {
             shared: true,
             crosshairs: true,
             formatter: function () {
-                let idx = this.x + startIdx;
+                let idx = this.x;
                 let s = `<b>Index: ${idx}</b>`;
                 this.points.forEach(p => {
                     s += `<br/><span style="color:${p.color}">\u25CF</span> ${p.series.name}: <b>${roundToPrecision(p.y)}</b>`;
@@ -196,9 +199,9 @@ function draw(preserveWindow = false) {
 
     if (state.showDerivative && document.getElementById("derivative-chart").style.display !== 'none') {
         let derivSeries = [];
-        derivSeries.push({ name: 'Raw d/dx', type: 'line', data: derivData, lineWidth: 1, color: tc.derivColor, opacity: 0.5, zIndex: 1 });
+        derivSeries.push({ name: 'Raw d/dx', type: 'line', data: derivData, lineWidth: 1, color: tc.derivColor, opacity: 0.5, zIndex: 1, pointStart: startIdx });
         if (state.isSmoothEnabled) {
-            derivSeries.push({ name: 'Smooth d/dx', type: 'line', data: smoothDerivData, lineWidth: 2, color: tc.smoothColor, zIndex: 3 });
+            derivSeries.push({ name: 'Smooth d/dx', type: 'line', data: smoothDerivData, lineWidth: 2, color: tc.smoothColor, zIndex: 3, pointStart: startIdx });
         }
 
         Highcharts.chart('derivative-chart', {
@@ -206,7 +209,7 @@ function draw(preserveWindow = false) {
             title: { text: undefined },
             boost: { useGPUTranslations: true },
             xAxis: {
-                min: 0, max: endIdx - startIdx - 1,
+                min: startIdx, max: endIdx - 1,
                 labels: { enabled: false },
                 gridLineColor: tc.grid
             },
