@@ -74,7 +74,7 @@ function runSGWizard() {
     let minW = parseInt(document.getElementById("wizMinW").value) || 5;
     let maxW = parseInt(document.getElementById("wizMaxW").value) || 51;
     let minO = parseInt(document.getElementById("wizMinO").value) || 2;
-    let maxO = parseInt(document.getElementById("wizMaxO").value) || 4;
+    let maxO = parseInt(document.getElementById("wizMaxO").value) || 3;
 
     let scope = document.querySelector('input[name="wizScope"]:checked').value;
 

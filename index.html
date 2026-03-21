@@ -371,7 +371,7 @@
                     <div class="flex-gap-5">
                         <input type="number" id="wizMinO" value="2" step="1" min="1" placeholder="Min" class="w-60">
                         <span class="text-muted">-</span>
-                        <input type="number" id="wizMaxO" value="4" step="1" min="1" placeholder="Max" class="w-60">
+                        <input type="number" id="wizMaxO" value="3" step="1" min="1" placeholder="Max" class="w-60">
                     </div>
                 </div>
             </div>
@@ -389,6 +389,46 @@
                 <div class="wizard-results-placeholder">Results...</div>
             </div>
             <button class="btn-text-only" onclick="closeModal('sgWizardModal')">Close</button>
+        </div>
+    </div>
+
+    <!-- Signal Swap Modal -->
+    <div id="signalSwapModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">Sinyal Değiştir / Swap Signal</h3>
+            <p class="modal-description">Ana sinyali hangi referansla değiştirmek istiyorsunuz?<br>
+                <small>Mevcut ana sinyal otomatik olarak referans listesine eklenecektir. Etiketler korunur.</small></p>
+            <div id="signalSwapList" style="display: flex; flex-direction: column; gap: 8px; margin: 15px 0;">
+                <!-- Populated by JS -->
+            </div>
+            <button class="btn-text-only" onclick="closeModal('signalSwapModal')">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Auto-Analysis Pipeline Modal -->
+    <div id="autoAnalysisModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                Auto-Analysis Pipeline
+            </h3>
+            <p class="modal-description">Tüm analiz adımlarını otomatik çalıştırır:<br>
+                Invert → SG Smooth → Histogram Baseline → Peak Detection → Expand</p>
+            <div class="input-group mb-10">
+                <label class="input-label">Sigma Multiplier (n) — Threshold = baseline + n×σ</label>
+                <input type="number" id="autoSigmaN" value="3" step="0.5" min="0.5" max="20" class="input-full">
+            </div>
+            <div class="input-group mb-15">
+                <label class="input-label">Min Width (Samples)</label>
+                <input type="number" id="autoMinWidth" value="10" step="1" min="1" class="input-full">
+            </div>
+            <button class="modal-btn peak-btn" onclick="runAutoAnalysis()"
+                style="background: linear-gradient(135deg, #7c4dff, #00e676); border: none; font-weight: 600;">
+                ⚡ Start Auto-Analysis
+            </button>
+            <button class="btn-text-only" onclick="closeModal('autoAnalysisModal')">Cancel</button>
         </div>
     </div>
 
@@ -486,6 +526,8 @@
             <input type="file" id="refInput" accept=".csv,.bin" multiple onchange="loadReference(this)">
             <button class="ref-btn btn-sm-add" onclick="clearReferences()"
                 title="Clear all reference signals">×</button>
+            <button class="ref-btn btn-sm-add" onclick="openSignalSwapDialog()"
+                title="Swap main signal with a reference (labels preserved)">⇆</button>
 
             <!-- Oscilloscope Info Button (Hidden by default) -->
             <button id="oscilloscopeInfoBtn" class="btn-icon hidden" onclick="openModal('oscilloscopeModal')"
@@ -631,6 +673,15 @@
                 </div>
             </div>
 
+            <div class="divider"></div>
+            <!-- Auto-Analysis Button -->
+            <button class="peak-btn" onclick="openAutoAnalysisModal()" title="Auto-Analysis Pipeline"
+                style="background: linear-gradient(135deg, #7c4dff, #00e676); border: none;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                ⚡
+            </button>
             <div class="divider"></div>
             <button id="derivToggleBtn" onclick="toggleDerivative()" title="Show/Hide Derivative Chart (d/dx)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -796,6 +847,7 @@
     <script src="js/analysis/filters.js"></script>
     <script src="js/analysis/peaks.js"></script>
     <script src="js/analysis/histogram.js"></script>
+    <script src="js/analysis/automation.js"></script>
 
     <!-- IO -->
     <script src="js/io/export.js"></script>
