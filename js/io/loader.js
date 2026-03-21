@@ -125,6 +125,7 @@ function startPass2(file, totalRows) {
                     if (v > globalMax) globalMax = v;
                 }
 
+                // Merkezi Sonlu Farklar ile türev: y'(i) ≈ (y(i+1) - y(i-1)) / 2
                 let rawDeriv = new Float32Array(len);
                 let factor = Math.pow(10, state.dataPrecision);
 
@@ -177,62 +178,38 @@ async function loadBin(files) {
         // Store for Scope Modal
         updateState({ scopeMetadata: setup });
 
-        // Find active channel
-        // Python: getActiveChannel returns channels with display == 'ON'
-        // We'll take the first active one, or the first one if none active
-        let activeCh = setup.channel.find(ch => ch.display === 'ON');
-        if (!activeCh && setup.channel.length > 0) {
-            activeCh = setup.channel[0];
-        }
+        // Find active channels (display === 'ON')
+        const activeChannels = (setup.channel || [])
+            .map((ch, idx) => ({ channel: ch, index: idx }))
+            .filter(item => item.channel.display === 'ON' && item.channel.successful_read);
 
-        if (!activeCh) {
+        if (activeChannels.length === 0) {
             throw new Error("No active channels found.");
         }
 
-        const signal = activeCh.data; // Float32Array already
-        const len = signal.length;
-        const labels = new Int8Array(len); // Zeros
-
-        // Calculate metadata
-        let globalMin = Infinity;
-        let globalMax = -Infinity;
-        for (let i = 0; i < len; i++) {
-            let v = signal[i];
-            if (v < globalMin) globalMin = v;
-            if (v > globalMax) globalMax = v;
-        }
-
-        // Calculate Derivative
-        let rawDeriv = new Float32Array(len);
-        let factor = Math.pow(10, state.dataPrecision);
-        for (let i = 1; i < len - 1; i++) {
-            rawDeriv[i] = Math.round(((signal[i + 1] - signal[i - 1]) / 2) * factor) / factor;
-        }
-
-        updateState({
-            signal: signal,
-            labels: labels,
-            globalMin: globalMin,
-            globalMax: globalMax,
-            rawDerivativeSignal: rawDeriv
-        });
-
-        // Update UI for Oscilloscope Config
-        displayOscilloscopeConfig(setup);
-
-        // Update Window/Stride defaults if needed
-        updateState({ windowStart: 0 });
-        if (elements.windowSizeInput) elements.windowSizeInput.value = state.windowSize;
-        if (elements.strideInput) elements.strideInput.value = state.stride;
-        updateSliderMax();
-
-        draw(true);
-
-        const fileName = files.length > 1 ? `${files.length} files merged` : files[0].name;
-        if (document.getElementById("file-status"))
-            document.getElementById("file-status").textContent = `File: ${fileName} (${len.toLocaleString()} pts)`;
-
         hideLoading();
+
+        let selectedCh;
+
+        if (activeChannels.length === 1) {
+            // Tek aktif kanal — otomatik seç
+            selectedCh = activeChannels[0].channel;
+        } else {
+            // Birden fazla aktif kanal — kullanıcıya sor
+            selectedCh = await showChannelSelectDialog(activeChannels);
+            if (!selectedCh) {
+                // Kullanıcı iptal etti
+                return;
+            }
+        }
+
+        showLoading("Processing Signal...", "Rendering");
+
+        // DT otomatik hesapla
+        autoCalculateDT(setup);
+
+        // Sinyali yükle
+        finalizeBinImport(selectedCh, setup, files);
 
     } catch (e) {
         console.error(e);
@@ -241,84 +218,185 @@ async function loadBin(files) {
     }
 }
 
-function displayOscilloscopeConfig(setup) {
-    // Show the button
-    const btn = document.getElementById('oscilloscopeInfoBtn');
-    if (btn) btn.classList.remove('hidden');
+/**
+ * BIN header'dan DT'yi otomatik hesaplar.
+ * Formül: DT = SCOPE_DIVS_HORIZONTAL * timebase_scale / sample_fullscreen
+ *
+ * Burada:
+ *   SCOPE_DIVS_HORIZONTAL = 15.2 (ekrandaki yatay div sayısı)
+ *   timebase_scale = timebase.scale string'inden parse edilen saniye değeri
+ *   sample_fullscreen = sample.fullscreen (ekrandaki nokta sayısı), yoksa sample.datalen
+ */
+function autoCalculateDT(setup) {
+    if (!setup.timebase || !setup.timebase.scale) return;
 
-    const container = document.getElementById('oscilloscopeConfigContent');
-    if (!container) return;
+    const timebaseScaleSec = window.binLoader.parseTimeScale(setup.timebase.scale);
+    if (timebaseScaleSec <= 0) return;
 
-    // Helper text for empty fields
-    const safeStr = (s) => (s && s !== 'N/A') ? s : '<span style="color:var(--text-muted)">-</span>';
+    // sample.fullscreen yoksa sample.datalen kullan
+    const sampleFullscreen = (setup.sample && setup.sample.fullscreen)
+        ? setup.sample.fullscreen
+        : (setup.sample && setup.sample.datalen)
+            ? setup.sample.datalen
+            : 0;
 
-    // 1. Device & Run Status
-    let html = `
-        <div class="config-group">
-            <h4>Device</h4>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <p><strong>Model:</strong> ${safeStr(setup.model)}</p>
-                <p><strong>Status:</strong> ${safeStr(setup.runstatus)}</p>
-                <p><strong>IDN:</strong> ${safeStr(setup.idn)}</p>
-            </div>
-        </div>
-    `;
+    if (sampleFullscreen <= 0) return;
 
-    // 2. Timebase & Sample
-    html += `
-        <div class="config-group">
-            <h4>Timebase & Acquisition</h4>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <p><strong>Scale:</strong> ${safeStr(setup.timebase?.scale)}</p>
-                <p><strong>H. Offset:</strong> ${safeStr(setup.timebase?.ho)}</p>
-                <p><strong>Total Points:</strong> ${safeStr(setup.sample?.datalen)}</p>
-                <p><strong>Format:</strong> ${safeStr(setup.datatype)}</p>
-            </div>
-        </div>
-    `;
+    const DIVS = window.SCOPE_DIVS_HORIZONTAL || 15.2;
 
-    // 3. Trigger (if available)
-    if (setup.trig) {
-        html += `
-            <div class="config-group">
-                <h4>Trigger</h4>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <p><strong>Mode:</strong> ${safeStr(setup.trig.mode)}</p>
-                    <p><strong>Source:</strong> ${safeStr(setup.trig.source)}</p>
-                    <p><strong>Level:</strong> ${safeStr(setup.trig.level)}</p>
-                    <p><strong>Slope:</strong> ${safeStr(setup.trig.slope)}</p>
-                </div>
-            </div>
-        `;
+    // Örnekleme aralığı (DT) hesabı:
+    //   DT = (yatay_division_sayısı × timebase_ölçeği) / ekrandaki_toplam_nokta
+    //
+    // Fiziksel anlam:
+    //   timebase_ölçeği × 15.2 = ekranın kapsadığı toplam süre (saniye)
+    //   toplam süre / nokta sayısı = iki ardışık örnek arasındaki zaman (DT)
+    //
+    // Örnek: timebase = 200ns, fullscreen = 1520 pts
+    //   DT = 15.2 × 200ns / 1520 = 2 ns
+    const dtSeconds = DIVS * timebaseScaleSec / sampleFullscreen;
+
+    // Uygun birimi bul (ps, ns, us, ms, s)
+    let dtValue = dtSeconds;
+    let dtUnit = 's';
+
+    const unitTable = [
+        { limit: 1e-12, unit: 'p', mult: 1e12 },   // pikosaniye
+        { limit: 1e-9,  unit: 'n', mult: 1e9 },     // nanosaniye
+        { limit: 1e-6,  unit: 'u', mult: 1e6 },     // mikrosaniye
+        { limit: 1e-3,  unit: 'm', mult: 1e3 },     // milisaniye
+    ];
+
+    for (const u of unitTable) {
+        if (dtSeconds < u.limit * 1000) {
+            dtValue = dtSeconds * u.mult;
+            dtUnit = u.unit;
+            break;
+        }
     }
 
-    html += `<hr style="border-color: var(--border-color); margin: 15px 0;"/><h4>Channels</h4>`;
+    // Hassasiyeti ayarla
+    dtValue = parseFloat(dtValue.toPrecision(6));
 
-    // 4. Channels
-    setup.channel.forEach((ch, i) => {
-        const isActive = ch.display === 'ON';
-        html += `
-            <div class="config-subgroup ${isActive ? 'active-channel' : 'inactive-channel'}">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                    <h5 style="margin:0;">${ch.name}</h5>
-                    <span style="font-size:0.75rem; color:${isActive ? 'var(--accent-color)' : 'var(--text-muted)'}">
-                        ${ch.display}
-                    </span>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
-                    <p><strong>Scale:</strong> ${safeStr(ch.scale)}</p>
-                    <p><strong>Probe:</strong> ${safeStr(ch.probe)}</p>
-                    <p><strong>Offset:</strong> ${safeStr(ch.offset)}</p>
-                    <p><strong>Coupling:</strong> ${safeStr(ch.coupling)}</p>
-                    <p><strong>Invert:</strong> ${safeStr(ch.inverse)}</p>
-                    <p><strong>BW Limit:</strong> ${safeStr(ch.bwlimit)}</p>
-                </div>
-            </div>
-        `;
+    // State güncelle
+    state.physics.dt = dtValue;
+    state.physics.dt_unit = dtUnit;
+
+    // UI güncelle
+    const dtInput = document.getElementById('physDt');
+    const dtUnitSelect = document.getElementById('physDtUnit');
+    if (dtInput) dtInput.value = dtValue;
+    if (dtUnitSelect) dtUnitSelect.value = dtUnit;
+
+    console.log(`Auto DT: ${dtValue} ${dtUnit} (${dtSeconds} s) — from ${setup.timebase.scale}, fullscreen=${sampleFullscreen}`);
+}
+
+/**
+ * Kanal seçim dialogunu gösterir.
+ * @returns {Promise<object|null>} Seçilen kanal objesi, iptal edilirse null
+ */
+function showChannelSelectDialog(activeChannels) {
+    return new Promise((resolve) => {
+        const container = document.getElementById('channelSelectList');
+        if (!container) {
+            resolve(activeChannels[0].channel);
+            return;
+        }
+
+        container.innerHTML = '';
+
+        activeChannels.forEach((item) => {
+            const ch = item.channel;
+            const btn = document.createElement('button');
+            btn.className = 'modal-btn';
+            btn.style.textAlign = 'left';
+            btn.innerHTML = `<strong>${ch.name || ('CH' + (item.index + 1))}</strong> — Scale: ${ch.scale || '?'}, Probe: ${ch.probe || '?'}`;
+            btn.onclick = () => {
+                closeModal('channelSelectModal');
+                resolve(ch);
+            };
+            container.appendChild(btn);
+        });
+
+        // Cancel butonu için
+        const modal = document.getElementById('channelSelectModal');
+        const cancelHandler = () => {
+            modal.removeEventListener('click', outsideClickHandler);
+            resolve(null);
+        };
+
+        const cancelBtn = modal.querySelector('.btn-text-only');
+        if (cancelBtn) {
+            cancelBtn.onclick = () => {
+                closeModal('channelSelectModal');
+                cancelHandler();
+            };
+        }
+
+        // Dışarı tıklama ile kapatma
+        const outsideClickHandler = (e) => {
+            if (e.target === modal) {
+                closeModal('channelSelectModal');
+                cancelHandler();
+            }
+        };
+        modal.addEventListener('click', outsideClickHandler);
+
+        openModal('channelSelectModal');
+    });
+}
+
+/**
+ * BIN import sonrası ortak işlemleri yapar (sinyal yükleme, türev, UI güncelleme).
+ */
+function finalizeBinImport(activeCh, setup, files) {
+    const signal = activeCh.data; // Float32Array already
+    const len = signal.length;
+    const labels = new Int8Array(len); // Zeros
+
+    // Calculate metadata
+    let globalMin = Infinity;
+    let globalMax = -Infinity;
+    for (let i = 0; i < len; i++) {
+        let v = signal[i];
+        if (v < globalMin) globalMin = v;
+        if (v > globalMax) globalMax = v;
+    }
+
+    // Calculate Derivative
+    let rawDeriv = new Float32Array(len);
+    let factor = Math.pow(10, state.dataPrecision);
+    for (let i = 1; i < len - 1; i++) {
+        rawDeriv[i] = Math.round(((signal[i + 1] - signal[i - 1]) / 2) * factor) / factor;
+    }
+
+    updateState({
+        signal: signal,
+        labels: labels,
+        globalMin: globalMin,
+        globalMax: globalMax,
+        rawDerivativeSignal: rawDeriv
     });
 
-    container.innerHTML = html;
+    // Update UI for Oscilloscope Config
+    displayOscilloscopeConfig(setup);
+
+    // Update Window/Stride defaults if needed
+    updateState({ windowStart: 0 });
+    if (elements.windowSizeInput) elements.windowSizeInput.value = state.windowSize;
+    if (elements.strideInput) elements.strideInput.value = state.stride;
+    updateSliderMax();
+
+    draw(true);
+
+    const fileName = files.length > 1 ? `${files.length} files merged` : files[0].name;
+    if (document.getElementById("file-status"))
+        document.getElementById("file-status").textContent = `File: ${fileName} (${len.toLocaleString()} pts)`;
+
+    hideLoading();
 }
+
+// displayOscilloscopeConfig moved to js/ui/oscilloscope_config_ui.js
+
 
 async function loadReference(input) {
     const files = input.files;
@@ -336,8 +414,24 @@ async function loadReference(input) {
             const setup = await window.binLoader.parseFiles(files);
 
             if (setup && setup.channel) {
-                // Use the first active channel, or just the first channel
-                let chVal = setup.channel.find(c => c.display === 'ON') || setup.channel[0];
+                // Find active channels
+                const activeChannels = (setup.channel || [])
+                    .map((ch, idx) => ({ channel: ch, index: idx }))
+                    .filter(item => item.channel.display === 'ON' && item.channel.successful_read);
+
+                hideLoading();
+
+                let chVal;
+                if (activeChannels.length === 0) {
+                    alert("No active channels found in reference file.");
+                    return;
+                } else if (activeChannels.length === 1) {
+                    chVal = activeChannels[0].channel;
+                } else {
+                    // Birden fazla aktif kanal — kullanıcıya sor
+                    chVal = await showChannelSelectDialog(activeChannels);
+                    if (!chVal) return; // İptal
+                }
 
                 if (chVal && chVal.data && chVal.data.length > 0) {
                     let refs = state.referenceSignals;
@@ -359,7 +453,6 @@ async function loadReference(input) {
                     alert("No valid channel data found in reference file.");
                 }
             }
-            hideLoading();
         } catch (e) {
             console.error(e);
             alert("Error loading reference bin: " + e.message);

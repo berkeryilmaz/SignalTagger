@@ -97,9 +97,18 @@ header {
 /* Controls Toolbar */
 .toolbar {
     display: flex;
-    gap: 8px;
+    gap: 4px;
     align-items: center;
     flex-grow: 1;
+    flex-wrap: wrap;
+    overflow: hidden;
+    max-height: 54px;
+}
+
+.toolbar-group {
+    display: flex;
+    gap: 3px;
+    align-items: center;
 }
 
 /* Label Palette - Scrollable */
@@ -204,16 +213,26 @@ button,
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
     color: var(--text-main);
-    padding: 6px 12px;
+    padding: 4px 8px;
     border-radius: 6px;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     display: flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 4px;
     user-select: none;
     white-space: nowrap;
     transition: background-color 0.2s;
+    height: 30px;
+    box-sizing: border-box;
+}
+
+.btn-sm-add {
+    padding: 4px 6px;
+    font-size: 0.75rem;
+    min-width: unset;
+    height: 30px;
 }
 
 button:hover,
@@ -301,7 +320,6 @@ button.active-green {
     padding: 4px;
     color: var(--text-muted);
     cursor: pointer;
-    margin-top: 12px;
 }
 
 .lock-btn:hover {

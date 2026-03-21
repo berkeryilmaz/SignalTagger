@@ -1,4 +1,42 @@
-// Analysis: Filters
+/**
+ * Sinyal Filtreleme — Savitzky-Golay Filtresi
+ * =============================================
+ *
+ * Teori: Savitzky-Golay Düzleştirme Filtresi
+ * ─────────────────────────────────────────────
+ * Veriye hareketli bir pencere içinde en küçük kareler yöntemiyle
+ * polinom uydurur. Klasik hareketli ortalamadan farklı olarak,
+ * sinyal tepe noktalarını ve şeklini daha iyi korur.
+ *
+ * Parametreler:
+ *   w (pencere) = 2m+1 nokta (m: yarı-genişlik)
+ *   p (derece)  = polinom derecesi (p < w olmalı)
+ *
+ * Filtrelenmiş değer, katsayılarla konvolüsyondur:
+ *   ŷ(i) = Σ_{j=-m}^{m} c_j · y(i+j)
+ *
+ * Katsayılar math_utils.js'deki calcSGWeights() ile hesaplanır.
+ *
+ * Türev (d/dx):
+ * Sonlu farklar yöntemiyle merkezi türev:
+ *   y'(i) ≈ (y(i+1) - y(i-1)) / 2
+ *
+ * Referans:
+ *   Savitzky, A.; Golay, M.J.E. (1964). Analytical Chemistry.
+ *   36(8): 1627–1639. doi:10.1021/ac60214a047
+ *
+ *   Steinier, J.; Termonia, Y.; Deltour, J. (1972).
+ *   Analytical Chemistry. 44(11): 1906–1909.
+ *
+ * R² (Belirleme Katsayısı):
+ * ─────────────────────────
+ * Filtrenin orijinal sinyali ne kadar iyi koruduğunu ölçer:
+ *   R² = 1 - SS_res / SS_tot
+ *   SS_res = Σ (yᵢ - ŷᵢ)²   (artık kareler toplamı)
+ *   SS_tot = Σ (yᵢ - ȳ)²    (toplam kareler toplamı)
+ *
+ * R² → 1: mükemmel koruma, R² → 0: çok fazla düzleştirme
+ */
 
 let isCalculating = false;
 
@@ -38,7 +76,7 @@ function recalcFilters() {
 
         const CHUNK_SIZE = 500000;
 
-        // Allocate rawDerivativeSignal if needed
+        // rawDerivativeSignal tahsisi
         let rawDeriv = state.rawDerivativeSignal;
         if (!rawDeriv || rawDeriv.length !== totalLen) {
             rawDeriv = new Float32Array(totalLen);
@@ -66,7 +104,7 @@ function recalcFilters() {
             updateState({ smoothedSignal: null, smoothDerivativeSignal: null });
         }
 
-        // SG Weights
+        // SG katsayıları (math_utils.js'den)
         let sgWeights = null;
         let sgM = 0;
         if (state.isSmoothEnabled) {
@@ -81,7 +119,7 @@ function recalcFilters() {
         function processChunk() {
             let end = Math.min(offset + CHUNK_SIZE, totalLen);
 
-            // 1. Raw Derivative
+            // 1. Ham Türev: y'(i) ≈ (y(i+1) - y(i-1)) / 2
             for (let i = offset; i < end; i++) {
                 if (i === 0 || i === totalLen - 1) {
                     rawDeriv[i] = 0;
@@ -90,7 +128,7 @@ function recalcFilters() {
                 }
             }
 
-            // 2. Smoothing & Smooth Derivative
+            // 2. SG Düzleştirme & Düzleştirilmiş Türev
             if (state.isSmoothEnabled) {
                 for (let i = offset; i < end; i++) {
                     if (i < sgM || i >= totalLen - sgM) {
@@ -132,70 +170,10 @@ function recalcFilters() {
     }, 50);
 }
 
-function calcSGWeights(m, order) {
-    const size = 2 * m + 1;
-    let A = [];
-    for (let i = -m; i <= m; i++) {
-        let row = [];
-        for (let j = 0; j <= order; j++) {
-            row.push(Math.pow(i, j));
-        }
-        A.push(row);
-    }
-
-    let AT = A[0].map((_, c) => A.map(r => r[c]));
-    let ATA = multiplyMatrices(AT, A);
-    let ATAInv = invertMatrix(ATA);
-    let coeffs = multiplyMatrices(ATAInv, AT);
-
-    return coeffs[0];
-}
-
-function multiplyMatrices(A, B) {
-    let result = new Array(A.length).fill(0).map(() => new Array(B[0].length).fill(0));
-    return result.map((row, i) => {
-        return row.map((val, j) => {
-            return A[i].reduce((sum, elm, k) => sum + (elm * B[k][j]), 0);
-        });
-    });
-}
-
-function invertMatrix(M) {
-    let n = M.length;
-    let A = JSON.parse(JSON.stringify(M));
-    let I = [];
-    for (let i = 0; i < n; i++) { I[i] = []; for (let j = 0; j < n; j++) I[i][j] = (i === j) ? 1 : 0; }
-
-    for (let i = 0; i < n; i++) {
-        let piv = A[i][i];
-        for (let j = 0; j < n; j++) { A[i][j] /= piv; I[i][j] /= piv; }
-        for (let k = 0; k < n; k++) {
-            if (k !== i) {
-                let f = A[k][i];
-                for (let j = 0; j < n; j++) { A[k][j] -= f * A[i][j]; I[k][j] -= f * I[i][j]; }
-            }
-        }
-    }
-    return I;
-}
-
-function applySmoothingToRaw() {
-    if (!state.isSmoothEnabled || !state.smoothedSignal) return alert("Please enable smoothing first.");
-    if (!confirm("Overwrite raw signal with smoothed version? This cannot be undone.")) return;
-
-    state.signal.set(state.smoothedSignal);
-    updateState({
-        isSmoothEnabled: false,
-        smoothedSignal: null,
-        smoothDerivativeSignal: null
-    });
-
-    if (elements.sgToggleBtn) elements.sgToggleBtn.classList.remove("active-green");
-    if (elements.sgSettingsPanel) elements.sgSettingsPanel.classList.remove("show");
-
-    recalcFilters();
-}
-
+/**
+ * SG filtresini tüm veriye uygular (bağımsız fonksiyon).
+ * SG Wizard tarafından kullanılır.
+ */
 function applySavitzkyGolay(data, windowSize, order) {
     let m = Math.floor(windowSize / 2);
     let weights = calcSGWeights(m, order);
@@ -215,6 +193,9 @@ function applySavitzkyGolay(data, windowSize, order) {
     return result;
 }
 
+/**
+ * R² belirleme katsayısını hesaplar.
+ */
 function calculateR2(original, smoothed) {
     let ssRes = 0;
     let ssTot = 0;
@@ -227,6 +208,23 @@ function calculateR2(original, smoothed) {
         ssTot += Math.pow(original[i] - mean, 2);
     }
     return 1 - (ssRes / ssTot);
+}
+
+function applySmoothingToRaw() {
+    if (!state.isSmoothEnabled || !state.smoothedSignal) return alert("Please enable smoothing first.");
+    if (!confirm("Overwrite raw signal with smoothed version? This cannot be undone.")) return;
+
+    state.signal.set(state.smoothedSignal);
+    updateState({
+        isSmoothEnabled: false,
+        smoothedSignal: null,
+        smoothDerivativeSignal: null
+    });
+
+    if (elements.sgToggleBtn) elements.sgToggleBtn.classList.remove("active-green");
+    if (elements.sgSettingsPanel) elements.sgSettingsPanel.classList.remove("show");
+
+    recalcFilters();
 }
 
 window.toggleSmooth = toggleSmooth;

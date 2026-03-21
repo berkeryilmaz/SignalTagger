@@ -46,6 +46,34 @@
                 <input type="range" id="uiScaleInput" min="0.5" max="1.5" step="0.05" value="1"
                     oninput="updateUIScale(this.value)">
             </div>
+
+            <div class="h-divider"></div>
+            <h4 class="section-header">Physics Parameters</h4>
+            <div class="input-group mb-10">
+                <label class="input-label">Resistance (R)</label>
+                <div class="flex-gap-5">
+                    <input type="number" id="physR" value="50" class="input-small" oninput="updatePhysics()">
+                    <select id="physRUnit" class="input-mini" onchange="updatePhysics()">
+                        <option value="m">mΩ</option>
+                        <option value="ohm" selected>Ω</option>
+                        <option value="k">kΩ</option>
+                        <option value="M">MΩ</option>
+                    </select>
+                </div>
+            </div>
+            <div class="input-group mb-15">
+                <label class="input-label">Time Step (dt)</label>
+                <div class="flex-gap-5">
+                    <input type="number" id="physDt" value="200" class="input-small" oninput="updatePhysics()">
+                    <select id="physDtUnit" class="input-mini" onchange="updatePhysics()">
+                        <option value="p">ps</option>
+                        <option value="n" selected>ns</option>
+                        <option value="u">µs</option>
+                        <option value="m">ms</option>
+                        <option value="s">s</option>
+                    </select>
+                </div>
+            </div>
             <button class="btn-text-only" onclick="closeModal('settingsModal')">Close</button>
         </div>
     </div>
@@ -246,10 +274,10 @@
                     <div id="distChartVoltage" class="chart-flex"></div>
                 </div>
 
-                <!-- Area Chart -->
+                <!-- Area Chart (Sum(V)) -->
                 <div class="dist-chart-card">
                     <div class="chart-header">
-                        <h5>Area Distribution</h5>
+                        <h5>∑(V) Distribution</h5>
                         <div class="flex-gap-5">
                             <span class="input-label m-0">Bins</span>
                             <input type="number" id="binsArea" min="5" max="500" step="1"
@@ -257,6 +285,59 @@
                         </div>
                     </div>
                     <div id="distChartArea" class="chart-flex"></div>
+                </div>
+
+                <!-- Sum(V^2) Chart -->
+                <div class="dist-chart-card">
+                    <div class="chart-header">
+                        <h5>∑(V²) Distribution</h5>
+                        <div class="flex-gap-5">
+                            <span class="input-label m-0">Bins</span>
+                            <input type="number" id="binsSumVSq" min="5" max="500" step="1"
+                                class="input-dist-bins input-dist-sumvsq" onchange="updateSingleDistChart('sumVSq')">
+                        </div>
+                    </div>
+                    <div id="distChartSumVSq" class="chart-flex"></div>
+                </div>
+
+                <!-- Charge Chart -->
+                <div class="dist-chart-card">
+                    <div class="chart-header">
+                        <h5>Charge (Q) Distribution</h5>
+                        <div class="flex-gap-5">
+                            <span class="input-label m-0">Bins</span>
+                            <input type="number" id="binsCharge" min="5" max="500" step="1"
+                                class="input-dist-bins input-dist-charge" onchange="updateSingleDistChart('charge')">
+                        </div>
+                    </div>
+                    <div id="distChartCharge" class="chart-flex"></div>
+                </div>
+
+                <!-- Energy (J) Chart -->
+                <div class="dist-chart-card">
+                    <div class="chart-header">
+                        <h5>Energy (J) Distribution</h5>
+                        <div class="flex-gap-5">
+                            <span class="input-label m-0">Bins</span>
+                            <input type="number" id="binsEnergy" min="5" max="500" step="1"
+                                class="input-dist-bins input-dist-energy" onchange="updateSingleDistChart('energy')">
+                        </div>
+                    </div>
+                    <div id="distChartEnergy" class="chart-flex"></div>
+                </div>
+
+                <!-- Energy (eV) Chart -->
+                <div class="dist-chart-card">
+                    <div class="chart-header">
+                        <h5>Energy (eV) Distribution</h5>
+                        <div class="flex-gap-5">
+                            <span class="input-label m-0">Bins</span>
+                            <input type="number" id="binsEnergyEV" min="5" max="500" step="1"
+                                class="input-dist-bins input-dist-energyev"
+                                onchange="updateSingleDistChart('energyEV')">
+                        </div>
+                    </div>
+                    <div id="distChartEnergyEV" class="chart-flex"></div>
                 </div>
             </div>
 
@@ -290,7 +371,7 @@
                     <div class="flex-gap-5">
                         <input type="number" id="wizMinO" value="2" step="1" min="1" placeholder="Min" class="w-60">
                         <span class="text-muted">-</span>
-                        <input type="number" id="wizMaxO" value="4" step="1" min="1" placeholder="Max" class="w-60">
+                        <input type="number" id="wizMaxO" value="3" step="1" min="1" placeholder="Max" class="w-60">
                     </div>
                 </div>
             </div>
@@ -308,6 +389,58 @@
                 <div class="wizard-results-placeholder">Results...</div>
             </div>
             <button class="btn-text-only" onclick="closeModal('sgWizardModal')">Close</button>
+        </div>
+    </div>
+
+    <!-- Signal Swap Modal -->
+    <div id="signalSwapModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">Sinyal Değiştir / Swap Signal</h3>
+            <p class="modal-description">Ana sinyali hangi referansla değiştirmek istiyorsunuz?<br>
+                <small>Mevcut ana sinyal otomatik olarak referans listesine eklenecektir. Etiketler korunur.</small></p>
+            <div id="signalSwapList" style="display: flex; flex-direction: column; gap: 8px; margin: 15px 0;">
+                <!-- Populated by JS -->
+            </div>
+            <button class="btn-text-only" onclick="closeModal('signalSwapModal')">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Auto-Analysis Pipeline Modal -->
+    <div id="autoAnalysisModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                Auto-Analysis Pipeline
+            </h3>
+            <p class="modal-description">Tüm analiz adımlarını otomatik çalıştırır:<br>
+                Invert → SG Smooth → Histogram Baseline → Peak Detection → Expand</p>
+            <div class="input-group mb-10">
+                <label class="input-label">Sigma Multiplier (n) — Threshold = baseline + n×σ</label>
+                <input type="number" id="autoSigmaN" value="3" step="0.5" min="0.5" max="20" class="input-full">
+            </div>
+            <div class="input-group mb-15">
+                <label class="input-label">Min Width (Samples)</label>
+                <input type="number" id="autoMinWidth" value="10" step="1" min="1" class="input-full">
+            </div>
+            <button class="modal-btn peak-btn" onclick="runAutoAnalysis()"
+                style="background: linear-gradient(135deg, #7c4dff, #00e676); border: none; font-weight: 600;">
+                ⚡ Start Auto-Analysis
+            </button>
+            <button class="btn-text-only" onclick="closeModal('autoAnalysisModal')">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Channel Selection Modal (BIN Import) -->
+    <div id="channelSelectModal" class="modal-overlay">
+        <div class="modal">
+            <h3 class="modal-title">Kanal Seçimi / Select Channel</h3>
+            <p class="modal-description">Hangi kanalın sinyalini import etmek istiyorsunuz?</p>
+            <div id="channelSelectList" style="display: flex; flex-direction: column; gap: 8px; margin: 15px 0;">
+                <!-- Populated by JS -->
+            </div>
+            <button class="btn-text-only" onclick="closeModal('channelSelectModal')">Cancel</button>
         </div>
     </div>
 
@@ -383,172 +516,166 @@
             P-DETSi<span>Lab</span>
         </div>
         <div class="toolbar">
-            <!-- Load Main Signal -->
-            <label for="fileInput" class="file-upload-label">Load File</label>
-            <input type="file" id="fileInput" accept=".csv,.bin" multiple>
-
-            <!-- Add Reference Signal -->
-            <label for="refInput" class="file-upload-label ref-btn" title="Add another signal for comparison">Add Ref
-                (+)</label>
-            <input type="file" id="refInput" accept=".csv,.bin" multiple onchange="loadReference(this)">
-            <button class="ref-btn btn-sm-add" onclick="clearReferences()"
-                title="Clear all reference signals">×</button>
-
-            <!-- Oscilloscope Info Button (Hidden by default) -->
-            <button id="oscilloscopeInfoBtn" class="btn-icon hidden" onclick="openModal('oscilloscopeModal')"
-                title="Oscilloscope Settings">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                </svg>
-            </button>
-
-            <!-- Settings Button -->
-            <button class="btn-icon" onclick="openModal('settingsModal')" title="Settings">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path
-                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z">
-                    </path>
-                </svg>
-            </button>
-
-            <!-- Open Scope Screen Modal -->
-            <button class="btn-icon" onclick="openScopeScreen()" title="Open Dedicated Scope Screen">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path
-                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
-                    </path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-            </button>
-
-            <div class="divider"></div>
-
-            <!-- Precision Input -->
-            <div class="input-group">
-                <span class="input-label">Precision</span>
-                <input type="number" id="precisionInput" value="3" step="1" min="0" max="15"
-                    onchange="updatePrecision()" class="input-mini">
+            <!-- File Group -->
+            <div class="toolbar-group">
+                <label for="fileInput" class="file-upload-label">Load</label>
+                <input type="file" id="fileInput" accept=".csv,.bin" multiple>
+                <label for="refInput" class="file-upload-label ref-btn" title="Add reference signal">Ref+</label>
+                <input type="file" id="refInput" accept=".csv,.bin" multiple onchange="loadReference(this)">
+                <button class="ref-btn btn-sm-add" onclick="clearReferences()" title="Clear references">×</button>
+                <button class="ref-btn btn-sm-add" onclick="openSignalSwapDialog()" title="Swap signal (labels preserved)">⇆</button>
             </div>
 
             <div class="divider"></div>
 
-            <!-- Invert Button -->
-            <button onclick="invertSignal()" title="Invert Signal (Multiply by -1)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M7 20V4m10 16V4M7 4l-4 4m4-4l4 4m6 12l-4-4m4 4l4-4" />
-                </svg>
-                +/-
-            </button>
-
-            <div class="divider"></div>
-
-            <div class="input-group">
-                <span class="input-label">Win Size</span>
-                <input type="number" id="windowSizeInput" value="1520" step="100" min="100">
-            </div>
-
-            <button class="lock-btn" id="lockSizeStrideBtn" onclick="toggleLock()" title="Link Window Size and Stride">
-                <svg id="iconUnlocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                    <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
-                </svg>
-                <svg id="iconLocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round" class="hidden">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
-            </button>
-
-            <div class="input-group">
-                <span class="input-label">Stride</span>
-                <input type="number" id="strideInput" value="1520" step="100" min="100">
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="input-group" title="Shift+Click on chart to set baseline">
-                <span class="input-label">Baseline</span>
-                <div class="flex-gap-5">
-                    <input type="checkbox" id="baselineToggle" class="cursor-pointer w-auto" title="Enable Baseline">
-                    <input type="number" id="baselineInput" value="0" step="0.005" disabled class="input-range">
-                </div>
-            </div>
-
-            <!-- Zero Baseline Button -->
-            <button onclick="alignBaselineToZero()" title="Shift signal to make current baseline 0">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 3v12m-4-4l4 4 4-4M5 21h14" />
-                </svg>
-                0
-            </button>
-
-            <div class="divider"></div>
-
-            <!-- Filters Group -->
-            <div class="sg-controls">
-                <button id="sgToggleBtn" onclick="toggleSmooth()" title="Toggle Savitzky-Golay Filter">
+            <!-- Settings Group -->
+            <div class="toolbar-group">
+                <button id="oscilloscopeInfoBtn" class="btn-icon hidden" onclick="openModal('oscilloscopeModal')" title="Oscilloscope Settings">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 12h18" />
-                        <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9z" />
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
                     </svg>
-                    Smooth
                 </button>
-                <button class="wizard-btn" onclick="openModal('sgWizardModal')" title="SG Optimizer Wizard">
+                <button class="btn-icon" onclick="openModal('settingsModal')" title="Settings">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path
-                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z">
                         </path>
                     </svg>
                 </button>
-
-                <!-- Apply Smooth Button -->
-                <button class="apply-btn" onclick="applySmoothingToRaw()"
-                    title="Apply smoothed signal as new raw signal">
+                <button class="btn-icon" onclick="openScopeScreen()" title="Scope Screen">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                </button>
+                <div class="input-group">
+                    <span class="input-label">Prec</span>
+                    <input type="number" id="precisionInput" value="3" step="1" min="0" max="9"
+                        onchange="updatePrecision()" class="input-mini">
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Signal Ops Group -->
+            <div class="toolbar-group">
+                <button onclick="invertSignal()" title="Invert Signal (+/-)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M7 20V4m10 16V4M7 4l-4 4m4-4l4 4m6 12l-4-4m4 4l4-4" />
+                    </svg>
+                </button>
+                <button class="peak-btn" onclick="openAutoAnalysisModal()" title="Auto-Analysis Pipeline"
+                    style="background: linear-gradient(135deg, #7c4dff, #00e676); border: none; color: #fff;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Window Group -->
+            <div class="toolbar-group">
+                <div class="input-group">
+                    <span class="input-label">Win</span>
+                    <input type="number" id="windowSizeInput" value="1520" step="100" min="100">
+                </div>
+                <button class="lock-btn" id="lockSizeStrideBtn" onclick="toggleLock()" title="Link Window Size and Stride">
+                    <svg id="iconUnlocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                    </svg>
+                    <svg id="iconLocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" class="hidden">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                </button>
+                <div class="input-group">
+                    <span class="input-label">Stride</span>
+                    <input type="number" id="strideInput" value="1520" step="100" min="100">
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Baseline Group -->
+            <div class="toolbar-group" title="Shift+Click on chart to set baseline">
+                <div class="input-group">
+                    <span class="input-label">Base</span>
+                    <div class="flex-gap-5">
+                        <input type="checkbox" id="baselineToggle" class="cursor-pointer w-auto" title="Enable Baseline">
+                        <input type="number" id="baselineInput" value="0" step="0.005" disabled class="input-range">
+                    </div>
+                </div>
+                <button onclick="alignBaselineToZero()" title="Zero baseline">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 3v12m-4-4l4 4 4-4M5 21h14" />
+                    </svg>
+                    0
+                </button>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Filters & Analysis Group -->
+            <div class="sg-controls">
+                <button id="sgToggleBtn" onclick="toggleSmooth()" title="Toggle Savitzky-Golay Filter">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12h18" />
+                        <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9z" />
+                    </svg>
+                    SG
+                </button>
+                <button class="wizard-btn" onclick="openModal('sgWizardModal')" title="SG Optimizer Wizard">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    </svg>
+                </button>
+                <button class="apply-btn" onclick="applySmoothingToRaw()" title="Apply smoothed as raw">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
                 </button>
-
-                <button class="peak-btn ml-5" onclick="openModal('peakModal')" title="Peak Finder Tool">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="peak-btn" onclick="openModal('peakModal')" title="Peak Finder">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 20h18L12 4z" />
                     </svg>
                 </button>
-                <!-- Histogram Button -->
-                <button class="histo-btn ml-5" onclick="runHistogramAnalysis(true)"
-                    title="Histogram & Gaussian Analysis">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="histo-btn" onclick="runHistogramAnalysis(true)" title="Histogram & Gaussian">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 20V10M12 20V4M6 20v-6" />
                     </svg>
                 </button>
 
                 <div id="sgSettingsPanel" class="sg-settings">
                     <div class="input-group">
-                        <span class="input-label">Filter N</span>
+                        <span class="input-label">N</span>
                         <input type="number" id="sgWindowInput" value="11" step="2" min="3" class="input-mini">
                     </div>
                     <div class="input-group">
-                        <span class="input-label">Poly P</span>
+                        <span class="input-label">P</span>
                         <input type="number" id="sgOrderInput" value="2" step="1" min="1" max="5" class="input-mini">
                     </div>
                 </div>
             </div>
 
             <div class="divider"></div>
-            <button id="derivToggleBtn" onclick="toggleDerivative()" title="Show/Hide Derivative Chart (d/dx)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 3v18h18" />
-                    <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
-                </svg>
-                dx
-            </button>
-            <div class="divider"></div>
-            <button onclick="prevWindow()" title="Prev">&lt;</button>
-            <button onclick="nextWindow()" title="Next">&gt;</button>
+
+            <!-- View & Nav Group -->
+            <div class="toolbar-group">
+                <button id="derivToggleBtn" onclick="toggleDerivative()" title="Show/Hide Derivative (d/dx)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 3v18h18" />
+                        <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
+                    </svg>
+                    dx
+                </button>
+                <button onclick="prevWindow()" title="Prev">&lt;</button>
+                <button onclick="nextWindow()" title="Next">&gt;</button>
+            </div>
         </div>
 
         <!-- Theme Toggle -->
@@ -638,7 +765,7 @@
                     </svg>
                     Distributions
                 </button>
-                <button class="modal-btn btn-xs-outlined btn-xs-peak" onclick="updatePeakAnalysis(event)">Refresh
+                <button class="modal-btn btn-xs-outlined btn-xs-peak" onclick="updatePeakAnalysis(event, true)">Refresh
                     Analysis</button>
                 <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2">
@@ -658,12 +785,16 @@
                             <th>Width (N)</th>
                             <th>FWHM (Samples)</th>
                             <th>Max Voltage</th>
-                            <th>Area (V·s)</th>
+                            <th>∑(V) (V·s)</th>
+                            <th>∑(V²) (V²·s)</th>
+                            <th>Charge</th>
+                            <th>Energy</th>
+                            <th>Energy (eV)</th>
                         </tr>
                     </thead>
                     <tbody id="analysisTableBody">
                         <tr>
-                            <td colspan="7" class="table-empty-msg">Load labels to see analysis.</td>
+                            <td colspan="12" class="table-empty-msg">Load labels to see analysis.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -671,8 +802,10 @@
         </div>
     </div>
 
-    <!-- Core Scripts -->
+    <!-- Core Scripts (sıralama önemli: bağımlılıklar önce) -->
+    <script src="js/core/constants.js"></script>
     <script src="js/core/state.js"></script>
+    <script src="js/core/math_utils.js"></script>
     <script src="js/core/class_manager.js"></script>
     <script src="js/core/signal_ops.js"></script>
     <script src="js/core/events.js"></script>
@@ -684,19 +817,27 @@
     <script src="js/ui/class_ui.js"></script>
     <script src="js/ui/analysis_ui.js"></script>
     <script src="js/ui/charts.js"></script>
+    <script src="js/ui/playback.js"></script>
+    <script src="js/ui/interactions.js"></script>
+    <script src="js/ui/scope_screen.js"></script>
+    <script src="js/ui/distributions_ui.js"></script>
+    <script src="js/ui/oscilloscope_config_ui.js"></script>
 
     <!-- Analysis -->
+    <script src="js/analysis/statistics.js"></script>
+    <script src="js/analysis/physics.js"></script>
+    <script src="js/analysis/region_detector.js"></script>
     <script src="js/analysis/filters.js"></script>
     <script src="js/analysis/peaks.js"></script>
     <script src="js/analysis/histogram.js"></script>
+    <script src="js/analysis/automation.js"></script>
 
     <!-- IO -->
-    <script src="js/io/export.js"></script>
     <script src="js/io/export.js"></script>
     <script src="js/io/bin_loader.js"></script>
     <script src="js/io/loader.js"></script>
 
-    <!-- Main Entry Point -->
+    <!-- Main Entry Point (en son) -->
     <script src="js/main.js"></script>
 </body>
 

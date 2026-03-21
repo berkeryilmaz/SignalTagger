@@ -1,97 +1,77 @@
-// Analysis: Peaks
+/**
+ * Puls (Peak) Analizi — Ana Orkestratör
+ * =======================================
+ *
+ * Bu modül, etiketli bölgelerin analiz edilmesini koordine eder.
+ * Bölge algılama, FWHM hesaplama ve fizik metrikleri ayrı modüllerden çağrılır:
+ *   - js/analysis/region_detector.js  → findLabeledRegions()
+ *   - js/analysis/physics.js          → calculateFWHM(), calculatePhysicsMetrics()
+ *
+ * Analiz Akışı:
+ *   1. Etiketli bölgeleri tara (region_detector)
+ *   2. Her bölge için istatistikleri hesapla (max, sum, sumSq)
+ *   3. FWHM hesapla (physics)
+ *   4. Fizik metriklerini hesapla: Q, E, eV (physics)
+ *   5. Sonuçları window.analysisData'ya yaz
+ *   6. Tablo güncelleme callback'ini çağır (analysis_ui)
+ */
 
 window.analysisData = [];
 
-function updatePeakAnalysis(e) {
-    if (e) e.stopPropagation();
+function updatePeakAnalysis(e, forceRebuild = false) {
+    // Robust event handling
+    if (e && e.stopPropagation) {
+        e.stopPropagation();
+    } else if (window.event) {
+        window.event.cancelBubble = true;
+    }
+
     if (!state.signal || state.signal.length === 0) return;
 
     const data = state.isSmoothEnabled ? state.smoothedSignal : state.signal;
     const labels = state.labels;
     window.analysisData = [];
 
-    let currentLabel = 0;
-    let start = -1;
-    let regions = [];
+    if (!labels) {
+        console.warn("No labels found in state");
+        return;
+    }
 
-    // Identify all contiguous regions of non-zero labels
-    for (let i = 0; i < labels.length; i++) {
-        let lbl = labels[i];
-        if (lbl !== currentLabel) {
-            // End of previous region
-            if (currentLabel !== 0) {
-                regions.push({ start: start, end: i - 1, label: currentLabel });
-            }
-            // Start of new region
-            if (lbl !== 0) {
-                start = i;
-            }
-            currentLabel = lbl;
-        }
-    }
-    // Handle last region
-    if (currentLabel !== 0) {
-        regions.push({ start: start, end: labels.length - 1, label: currentLabel });
-    }
+    // 1. Bölgeleri tara
+    const regions = findLabeledRegions(labels);
 
     let countEl = document.getElementById("peak-count");
-    if (countEl) countEl.textContent = `${regions.length} regions found`;
+    if (countEl) countEl.textContent = `${regions.length} regions (scanned ${labels.length.toLocaleString()} pts)`;
 
     let base = state.isBaselineEnabled ? state.baselineValue : 0;
+
+    // 2. Fizik parametrelerini al
+    const physParams = getPhysicsParams();
 
     regions.forEach((r, index) => {
         let width = r.end - r.start + 1;
         let maxVal = -Infinity;
         let maxIndex = -1;
         let area = 0;
+        let sumVSq = 0;
 
+        // 3. Bölge istatistikleri
         for (let j = r.start; j <= r.end; j++) {
             let val = data[j];
             if (val > maxVal) {
                 maxVal = val;
                 maxIndex = j;
             }
-            area += (val - base);
+            let diff = val - base;
+            area += diff;
+            sumVSq += (diff * diff);
         }
 
-        // FWHM Calculation
-        let fwhm = 0;
-        if (maxIndex !== -1) {
-            let halfMax = (maxVal - base) / 2 + base;
+        // 4. FWHM hesapla
+        let fwhm = calculateFWHM(data, r.start, r.end, maxVal, maxIndex, base);
 
-            // Find left crossing
-            let leftIdx = maxIndex;
-            while (leftIdx > r.start && data[leftIdx] > halfMax) {
-                leftIdx--;
-            }
-            // Linear interpolate left
-            let fwhmStart = leftIdx;
-            if (data[leftIdx] <= halfMax && data[leftIdx + 1] > halfMax) {
-                let v1 = data[leftIdx];
-                let v2 = data[leftIdx + 1];
-                fwhmStart = leftIdx + (halfMax - v1) / (v2 - v1);
-            }
-
-            // Find right crossing
-            let rightIdx = maxIndex;
-            while (rightIdx < r.end && data[rightIdx] > halfMax) {
-                rightIdx++;
-            }
-            // Linear interpolate right
-            let fwhmEnd = rightIdx;
-            if (data[rightIdx] <= halfMax && data[rightIdx - 1] > halfMax) {
-                let v1 = data[rightIdx - 1]; // higher
-                let v2 = data[rightIdx];     // lower
-                // Interpolate between rightIdx-1 and rightIdx
-                // x = (y - y1) / (y2 - y1) + x1
-                // Here x1 = rightIdx-1, x2 = rightIdx
-                // fwhmEnd = (rightIdx - 1) + (halfMax - v1) / (v2 - v1);
-                fwhmEnd = (rightIdx - 1) + (halfMax - v1) / (v2 - v1);
-            }
-
-            fwhm = fwhmEnd - fwhmStart;
-            if (fwhm < 0) fwhm = 0;
-        }
+        // 5. Fizik metrikleri
+        let physics = calculatePhysicsMetrics({ area, sumVSq }, physParams);
 
         window.analysisData.push({
             id: index + 1,
@@ -99,119 +79,19 @@ function updatePeakAnalysis(e) {
             start: r.start,
             end: r.end,
             width: width,
-            fwhm: roundToPrecision(fwhm),
-            maxVal: roundToPrecision(maxVal),
-            area: roundToPrecision(area)
+            fwhm: fwhm,
+            maxVal: maxVal,
+            area: area,
+            sumVSq: sumVSq,
+            charge: physics.charge,
+            energy: physics.energy,
+            energyEV: physics.energyEV
         });
     });
 
-    if (window.renderAnalysisTable) window.renderAnalysisTable();
-}
-
-function runThresholdDetection() {
-    if (!state.signal) return;
-    let threshold = parseFloat(document.getElementById("peakThreshold").value) || 0;
-    let minWidth = parseInt(document.getElementById("peakMinWidth").value) || 10;
-
-    const data = state.isSmoothEnabled ? state.smoothedSignal : state.signal;
-    let count = 0;
-    let inRegion = false;
-    let start = -1;
-
-    for (let i = 0; i < data.length; i++) {
-        if (data[i] > threshold) {
-            if (!inRegion) { inRegion = true; start = i; }
-        } else {
-            if (inRegion) {
-                inRegion = false;
-                if (i - start >= minWidth) {
-                    fillLabel(start, i - 1, 2);
-                    count++;
-                }
-            }
-        }
-    }
-    if (inRegion && data.length - start >= minWidth) {
-        fillLabel(start, data.length - 1, 2);
-        count++;
-    }
-
-    document.getElementById("peakResultMsg").textContent = `Found ${count} peaks via Threshold.`;
-    if (window.redrawCallback) window.redrawCallback();
-}
-
-function fillLabel(start, end, type) {
-    for (let i = start; i <= end; i++) state.labels[i] = type;
-}
-
-function runProminenceDetection() {
-    document.getElementById("peakResultMsg").textContent = "Prominence detection not fully ported in this step.";
-}
-
-function setCallbacks(jump, redraw) {
-    window.jumpToCallback = jump;
-    window.redrawCallback = redraw;
-}
-
-function expandPeaksToBaseline() {
-    if (!state.signal || state.signal.length === 0) return alert("Load a file first!");
-
-    let modifiedCount = 0;
-    const baseline = state.baselineValue;
-    const data = state.isSmoothEnabled ? state.smoothedSignal : state.signal;
-    const labels = state.labels;
-
-    let peakSegments = [];
-    let inPeak = false;
-    let start = -1;
-
-    for (let i = 0; i < labels.length; i++) {
-        if (labels[i] === 2) {
-            if (!inPeak) {
-                start = i;
-                inPeak = true;
-            }
-        } else {
-            if (inPeak) {
-                peakSegments.push({ start: start, end: i - 1 });
-                inPeak = false;
-            }
-        }
-    }
-    if (inPeak) peakSegments.push({ start: start, end: labels.length - 1 });
-
-    if (peakSegments.length === 0) return alert("No peaks marked to expand.");
-
-    peakSegments.forEach(seg => {
-        let left = seg.start - 1;
-        while (left >= 0 && data[left] > baseline && labels[left] !== 2) {
-            labels[left] = 2;
-            modifiedCount++;
-            left--;
-        }
-
-        let right = seg.end + 1;
-        while (right < data.length && data[right] > baseline && labels[right] !== 2) {
-            labels[right] = 2;
-            modifiedCount++;
-            right++;
-        }
-    });
-
-    const msg = document.getElementById("peakResultMsg");
-    if (msg) msg.textContent = `Expanded peaks by ${modifiedCount} points.`;
-
-    if (window.redrawCallback) window.redrawCallback(false);
-    updatePeakAnalysis();
+    if (window.renderAnalysisTable) window.renderAnalysisTable(forceRebuild);
 }
 
 // Global exposure
 window.updatePeakAnalysis = updatePeakAnalysis;
-// sortAnalysisTable moved to analysis_ui.js
-// renderAnalysisTable moved to analysis_ui.js
-// showPeakDistributions moved to analysis_ui.js
-window.runThresholdDetection = runThresholdDetection;
-window.runProminenceDetection = runProminenceDetection;
-window.setCallbacks = setCallbacks;
-window.expandPeaksToBaseline = expandPeaksToBaseline;
 window.analysisData = window.analysisData || [];

@@ -121,7 +121,13 @@ function toggleAnalysisPanel() {
     const p = elements.analysisPanel; // analysis-panel in HTML
     if (!p) return;
     p.classList.toggle("collapsed");
-    document.querySelector(".analysis-header span:last-child").textContent = p.classList.contains("collapsed") ? "▼" : "▲";
+
+    const chevron = document.querySelector(".analysis-header .chevron");
+    if (chevron) {
+        // Rotate 180 degrees if collapsed (pointing up), 0 if expanded (pointing down)
+        chevron.style.transform = p.classList.contains("collapsed") ? "rotate(180deg)" : "rotate(0deg)";
+        chevron.style.transition = "transform 0.3s ease";
+    }
 }
 
 window.toggleAnalysisPanel = toggleAnalysisPanel;
