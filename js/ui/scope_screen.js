@@ -1,4 +1,4 @@
-// UI: Scope Screen — Osiloskop Ekranı Çizimi
+// UI: Scope Screen — Osiloskop Ekranı Çizimi (OWON XDS 3302)
 // Dedicated scope screen modal için Highcharts çizimini yönetir.
 
 function drawScopeScreen() {
@@ -11,7 +11,7 @@ function drawScopeScreen() {
     const meta = state.scopeMetadata;
     let activeCh = meta.channel.find(c => c.display === 'ON') || meta.channel[0];
 
-    // Ham-Gerilim dönüşüm fonksiyonu
+    // ─── Kanal Parametrelerini Çıkar ────────────────────────────
     const parseVolts = (str) => {
         let v = parseFloat(str);
         if (str.includes('mV')) v /= 1000;
@@ -22,19 +22,25 @@ function drawScopeScreen() {
     const probe = parseFloat(activeCh.probe.replace('x', '')) || 1;
     const offsetRaw = parseFloat(activeCh.offset) || 0;
 
-    const rawToVolt = (raw) => {
-        return (raw * 0.0025 - (offsetRaw * 0.02)) * scale * probe;
-    };
-
-    const minVolt = rawToVolt(-2048);
-    const maxVolt = rawToVolt(2047);
+    // ─── ADC → Volt Dönüşümü ───────────────────────────────────
+    // Paylaşılan rawToVoltage() fonksiyonu kullanılır (utils.js).
+    // 12-bit signed ADC: [-2048, 2047] aralığı
+    const minVolt = rawToVoltage(-2048, offsetRaw, scale, probe);
+    const maxVolt = rawToVoltage(2047, offsetRaw, scale, probe);
 
     // OSD güncelle
     document.getElementById("osd-tl").textContent = `CH1: ${activeCh.scale}`;
     document.getElementById("osd-bl").textContent = `Offset: ${activeCh.offset}`;
 
-    // Zaman tabanı bölümleri (15.2 division)
-    const divWidth = state.windowSize / 15.2;
+    // ─── Osiloskop Ekran Düzeni ────────────────────────────────
+    //
+    // OWON XDS 3302 ekranı:
+    //   Yatay: 15.2 division (SCOPE_DIVS_HORIZONTAL, constants.js)
+    //   Dikey: 10 division (5 yukarı + 5 aşağı, SCOPE_DIVS_VERTICAL)
+    //
+    // divWidth: Her yatay division'daki örnek (sample) sayısı
+    //   divWidth = windowSize / 15.2
+    const divWidth = state.windowSize / SCOPE_DIVS_HORIZONTAL;
     const xCenter = (state.windowSize - 1) / 2;
 
     let startIdx = state.windowStart;
@@ -53,14 +59,16 @@ function drawScopeScreen() {
 
     const yCenter = (minVolt + maxVolt) / 2;
 
-    // Y-Axis: 11 tick (10 bölüm)
+    // Y-Axis: 11 tick (10 aralık = SCOPE_DIVS_VERTICAL bölüm)
+    //   minVolt'tan maxVolt'a eşit adımlar
     const yTicks = [];
-    const yStep = (maxVolt - minVolt) / 10;
-    for (let i = 0; i <= 10; i++) {
+    const yStep = (maxVolt - minVolt) / SCOPE_DIVS_VERTICAL;
+    for (let i = 0; i <= SCOPE_DIVS_VERTICAL; i++) {
         yTicks.push(minVolt + i * yStep);
     }
 
-    // X-Axis: Merkeze göre tam bölüm tick'leri
+    // X-Axis: Merkeze göre ±7 division tick'i
+    //   15.2 ÷ 2 ≈ 7.6 → 7 tam division yeterli (±7 = 15 div kapsar)
     const xTicks = [];
     for (let d = -7; d <= 7; d++) {
         xTicks.push(xCenter + d * divWidth);

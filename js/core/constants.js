@@ -90,13 +90,34 @@ const PREFIX_SCALE_TABLE = Object.freeze([
     { limit: 1e-15, prefix: 'f' }
 ]);
 
-// ─── Osiloskop Sabitleri ─────────────────────────────────────────────
+// ─── Osiloskop Sabitleri (OWON XDS 3302) ────────────────────────────
 /**
  * Ekrandaki yatay bölme (division) sayısı.
- * Siglent SDS serisi osiloskoplarda ekran 15.2 yatay division'a bölünür.
+ * OWON XDS 3302 osiloskopunda ekran 15.2 yatay division'a bölünür.
  * DT hesabında kullanılır: DT = SCOPE_DIVS_HORIZONTAL * timebase_scale / sample_fullscreen
  */
 const SCOPE_DIVS_HORIZONTAL = 15.2;
+
+/**
+ * ADC (Analog-to-Digital Converter) Sabitleri
+ * ────────────────────────────────────────────
+ * OWON XDS 3302 osiloskopunda:
+ *   Dikey ekran: 10 division (5 yukarı + 5 aşağı, merkez = 0)
+ *   ADC çözünürlüğü: 12-bit signed → [-2048, 2047] aralığı
+ *
+ * ADC_HALF_RANGE: Yarı ADC aralığı. 12-bit signed veri için 2^11 = 2048.
+ *   Ham ADC değerini division'a çevirmek için:
+ *     division = raw × (SCOPE_DIVS_VERTICAL/2) / ADC_HALF_RANGE
+ *
+ * SCOPE_DIVS_VERTICAL: Dikey division sayısı (5 yukarı + 5 aşağı = 10).
+ *
+ * OFFSET_SCALE_FACTOR: Osiloskop offset ölçekleme faktörü.
+ *   Offset ayarında 2 division = %100 olarak kodlanır.
+ *   offset_divs = offset_yüzde × 2 / 100
+ */
+const ADC_HALF_RANGE = 2048;
+const SCOPE_DIVS_VERTICAL = 10;
+const OFFSET_SCALE_FACTOR = 2 / 100;  // 2 div = %100
 
 // Global exposure
 window.PHYSICS_CONSTANTS = PHYSICS_CONSTANTS;
@@ -104,3 +125,6 @@ window.SI_PREFIXES = SI_PREFIXES;
 window.BASE_UNITS = BASE_UNITS;
 window.PREFIX_SCALE_TABLE = PREFIX_SCALE_TABLE;
 window.SCOPE_DIVS_HORIZONTAL = SCOPE_DIVS_HORIZONTAL;
+window.ADC_HALF_RANGE = ADC_HALF_RANGE;
+window.SCOPE_DIVS_VERTICAL = SCOPE_DIVS_VERTICAL;
+window.OFFSET_SCALE_FACTOR = OFFSET_SCALE_FACTOR;

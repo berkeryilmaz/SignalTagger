@@ -1,9 +1,12 @@
 /**
- * Handles .bin file parsing for Oscilloscope data
- * Ports logic from:
- * - Oscilloscope/FileReader.py
- * - Oscilloscope/Oscilloscope.py
- * - Oscilloscope/Channel.py
+ * OWON XDS 3302 Binary Dosya Okuyucu
+ * ====================================
+ *
+ * .bin dosyalarının parse edilmesi. Osiloskop binary formatı:
+ *   1. JSON header (dosyanın başında, ~50KB içinde)
+ *   2. Sabit byte ayırıcılarla ayrılmış kanal veri blokları
+ *
+ * Format kaynak: OWON XDS 3302 binary export
  */
 
 class BinLoader {
@@ -102,7 +105,13 @@ class BinLoader {
             throw new Error(`Could not find valid JSON config in header (first 50KB).`);
         }
 
-        // 2. Determine Data Splitter
+        // 2. Kanal Veri Ayırıcıları (Data Block Separators)
+        // ─────────────────────────────────────────────────────
+        // OWON .bin dosyalarında kanal verileri sabit byte dizileriyle ayrılır.
+        // Bu ayırıcılar veri bloğunun byte uzunluğunu little-endian olarak kodlar:
+        //   [0xF0, 0x05, 0x00, 0x00] → normal mod ayırıcısı
+        //   [0xE0, 0x0B, 0x00, 0x00] → 0x0BE0 = 3040 (dec) = 1520 × 2 byte (Int16)
+        //     1520 sample × 2 byte per Int16 = 3040 byte veri bloğu
         const dataLen = setup.sample.datalen;
         let splitBytes = [0xF0, 0x05, 0x00, 0x00];
         if (dataLen === 1520) {
@@ -184,27 +193,24 @@ class BinLoader {
         return indices;
     }
 
+    /**
+     * Ham ADC verilerini gerilim (Volt) değerlerine dönüştürür.
+     * Paylaşılan rawToVoltage() fonksiyonunu (utils.js) kullanır.
+     *
+     * Dönüşüm formülü:
+     *   V = (raw × 5/2048 − offset × 2/100) × voltageScale × probeMultiplier
+     *
+     * Detaylı açıklama: utils.js → rawToVoltage()
+     */
     convertToVoltage(rawData, channel) {
-        // Python:
-        // voltage_scale = Helper.parseVoltage(self.scale)
-        // probe_multipler = Helper.parseProbeMultipler(self.probe)
-        // num = (5 * value / 2000 - self.offset * 2 / 100) * voltage_scale * probe_multipler
-
         const voltageScale = this.parseVoltage(channel.scale);
         const probeMultiplier = this.parseProbeMultiplier(channel.probe);
         const offset = parseFloat(channel.offset) || 0;
 
         const floatData = new Float32Array(rawData.length);
 
-        // Pre-calculate constants
-        const factor = (5 / 2000);
-        const offsetStr = (offset * 2 / 100);
-        const totalMult = voltageScale * probeMultiplier;
-
         for (let i = 0; i < rawData.length; i++) {
-            const value = rawData[i];
-            const num = (value * factor - offsetStr) * totalMult;
-            floatData[i] = num;  // JS keeps plenty of precision
+            floatData[i] = rawToVoltage(rawData[i], offset, voltageScale, probeMultiplier);
         }
         return floatData;
     }

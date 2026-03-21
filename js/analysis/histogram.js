@@ -36,7 +36,10 @@ function runHistogramAnalysis(autoBins = false) {
 
     if (dataArr.length < 2) return;
 
-    // Temel istatistikler
+    // Temel istatistikler:
+    //   Ortalama (mean): μ = (1/N) × Σ xᵢ
+    //   Standart Sapma (population): σ = √((1/N) × Σ(xᵢ - μ)²)
+    //   Not: N ile bölünür (population std). Büyük N'de N-1 farkı ihmal edilir.
     let sum = 0; for (let v of dataArr) sum += v;
     let mean = sum / dataArr.length;
     let sumSqDiff = 0; for (let v of dataArr) sumSqDiff += Math.pow(v - mean, 2);

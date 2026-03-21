@@ -122,6 +122,10 @@ function swapSignalWithReference(refIndex) {
         }
 
         // 5. Türev hesapla
+        // Merkezi Sonlu Farklar (Central Finite Difference):
+        //   y'(i) ≈ (y(i+1) - y(i-1)) / 2
+        // O(h²) doğruluk, forward difference'tan üstündür.
+        // factor ile yuvarlama: hassasiyeti dataPrecision'a kısıtlar.
         const rawDeriv = new Float32Array(newSignal.length);
         const factor = Math.pow(10, state.dataPrecision);
         for (let i = 1; i < newSignal.length - 1; i++) {

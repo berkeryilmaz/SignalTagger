@@ -71,7 +71,7 @@ function formatMetric(value, baseUnit) {
     const absVal = Math.abs(value);
 
     for (let i = 0; i < PREFIX_SCALE_TABLE.length; i++) {
-        if (absVal >= PREFIX_SCALE_TABLE[i].limit * 0.9) {
+        if (absVal >= PREFIX_SCALE_TABLE[i].limit) {
             let scaled = value / PREFIX_SCALE_TABLE[i].limit;
             return `${scaled.toFixed(3)} ${PREFIX_SCALE_TABLE[i].prefix}${baseUnit}`;
         }
@@ -103,6 +103,51 @@ function calculateColumnUnit(values) {
 }
 window.calculateColumnUnit = calculateColumnUnit;
 
+/**
+ * ADC Ham Değer → Gerilim (Volt) Dönüşümü
+ * ─────────────────────────────────────────
+ * OWON XDS 3302 osiloskop ekranı:
+ *   Dikey: 10 division (5 yukarı + 5 aşağı, merkez = 0)
+ *   ADC:   12-bit signed → [-2048, 2047] aralığı
+ *
+ * Dönüşüm formülü:
+ *   V = (raw × 5/2048 − offset × 2/100) × voltageScale × probeMultiplier
+ *
+ *   raw × 5/2048    : Ham ADC değerini division birimine çevirir.
+ *                     5 = yarı ekranın division sayısı (yukarı yönde)
+ *                     2048 = 12-bit signed ADC'nin yarı aralığı (2^11)
+ *                     Ekranın tam ortası raw=0, tepesi raw=2047, altı raw=-2048.
+ *
+ *   offset × 2/100  : Kanal DC ofsetini division birimine çevirir.
+ *                     Osiloskop, offset değerini yüzde olarak kodlar:
+ *                     %100 = 2 division kayma.
+ *
+ *   voltageScale     : V/div — her bir division'ın Volt karşılığı.
+ *
+ *   probeMultiplier  : Prob/yükselteç çarpanı.
+ *                     Sinyalin kaç kat yükseltildiğini belirtir.
+ *
+ * Referans: OWON XDS 3302 User Manual, ADC Data Format
+ *
+ * @param {number} raw             - Ham ADC değeri (12-bit signed, [-2048, 2047])
+ * @param {number} offset          - Kanal ofseti (osiloskop biriminde, %)
+ * @param {number} voltageScale    - Dikey ölçek (V/div)
+ * @param {number} probeMultiplier - Prob/yükselteç çarpanı
+ * @returns {number} Gerilim değeri (Volt)
+ */
+function rawToVoltage(raw, offset, voltageScale, probeMultiplier) {
+    // division = raw × (dikey_yarı_div / ADC_yarı_aralık) = raw × 5 / 2048
+    const halfDivs = SCOPE_DIVS_VERTICAL / 2;  // 5
+    const rawInDivs = raw * halfDivs / ADC_HALF_RANGE;
+
+    // Offset dönüşümü: offset × 2/100 → division
+    const offsetInDivs = offset * OFFSET_SCALE_FACTOR;
+
+    // Sonuç: (division − offset_division) × V/div × prob_çarpanı
+    return (rawInDivs - offsetInDivs) * voltageScale * probeMultiplier;
+}
+
+window.rawToVoltage = rawToVoltage;
 window.roundToPrecision = roundToPrecision;
 window.getThemeColors = getThemeColors;
 window.getRandomColor = getRandomColor;

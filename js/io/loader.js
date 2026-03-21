@@ -125,6 +125,7 @@ function startPass2(file, totalRows) {
                     if (v > globalMax) globalMax = v;
                 }
 
+                // Merkezi Sonlu Farklar ile türev: y'(i) ≈ (y(i+1) - y(i-1)) / 2
                 let rawDeriv = new Float32Array(len);
                 let factor = Math.pow(10, state.dataPrecision);
 
@@ -243,7 +244,15 @@ function autoCalculateDT(setup) {
 
     const DIVS = window.SCOPE_DIVS_HORIZONTAL || 15.2;
 
-    // DT (saniye) = 15.2 * timebase_scale / fullscreen
+    // Örnekleme aralığı (DT) hesabı:
+    //   DT = (yatay_division_sayısı × timebase_ölçeği) / ekrandaki_toplam_nokta
+    //
+    // Fiziksel anlam:
+    //   timebase_ölçeği × 15.2 = ekranın kapsadığı toplam süre (saniye)
+    //   toplam süre / nokta sayısı = iki ardışık örnek arasındaki zaman (DT)
+    //
+    // Örnek: timebase = 200ns, fullscreen = 1520 pts
+    //   DT = 15.2 × 200ns / 1520 = 2 ns
     const dtSeconds = DIVS * timebaseScaleSec / sampleFullscreen;
 
     // Uygun birimi bul (ps, ns, us, ms, s)

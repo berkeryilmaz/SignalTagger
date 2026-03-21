@@ -27,27 +27,32 @@ async function runAutoAnalysis() {
 
     try {
         // ─── Adım 1: Sinyali Ters Çevir ────────────────────────
-        showLoading("Auto-Analysis: Inverting Signal...", "Step 1/5");
+        showLoading("Auto-Analysis: Inverting Signal...", "Step 1/6");
         await delay(50);
         await invertSignalAsync();
 
         // ─── Adım 2: SG Wizard — En İyi Parametreyi Bul ve Uygula ─
-        showLoading("Auto-Analysis: Finding Best SG Parameters...", "Step 2/5");
+        showLoading("Auto-Analysis: Finding Best SG Parameters...", "Step 2/6");
         await delay(50);
         await runSGWizardAsync();
 
-        // ─── Adım 3: Histogram + Gaussian → Baseline & Sigma ──
-        showLoading("Auto-Analysis: Histogram & Baseline...", "Step 3/5");
+        // ─── Adım 3: Smooth'u Raw'a Uygula ─────────────────────
+        showLoading("Auto-Analysis: Applying Smooth to Raw...", "Step 3/6");
+        await delay(50);
+        await applySmoothToRawAsync();
+
+        // ─── Adım 4: Histogram + Gaussian → Baseline & Sigma ──
+        showLoading("Auto-Analysis: Histogram & Baseline...", "Step 4/6");
         await delay(50);
         const sigma = await runHistogramAndSetBaseline();
 
-        // ─── Adım 4: Threshold Detection ───────────────────────
-        showLoading("Auto-Analysis: Peak Detection...", "Step 4/5");
+        // ─── Adım 5: Threshold Detection ───────────────────────
+        showLoading("Auto-Analysis: Peak Detection...", "Step 5/6");
         await delay(50);
         await runThresholdDetectionAuto(sigma, sigmaMultiplier, minWidth);
 
-        // ─── Adım 5: Expand Peaks to Baseline ──────────────────
-        showLoading("Auto-Analysis: Expanding Peaks...", "Step 5/5");
+        // ─── Adım 6: Expand Peaks to Baseline ──────────────────
+        showLoading("Auto-Analysis: Expanding Peaks...", "Step 6/6");
         await delay(50);
         expandPeaksToBaseline();
 
@@ -55,9 +60,10 @@ async function runAutoAnalysis() {
 
         // Sonuçları göster
         const peakCount = findLabeledRegions(state.labels).filter(r => r.label === 2).length;
+        const thresholdVal = state.baselineValue + sigmaMultiplier * sigma;
         alert(`Auto-Analysis tamamlandı!\n\n` +
-            `• Sigma: ${sigma.toFixed(6)}\n` +
-            `• Threshold: ${(state.baselineValue + sigmaMultiplier * sigma).toFixed(6)} (${sigmaMultiplier}σ)\n` +
+            `• Sigma: ${formatMetric(sigma, 'V')}\n` +
+            `• Threshold: ${formatMetric(thresholdVal, 'V')} (${sigmaMultiplier}σ)\n` +
             `• Bulunan peak sayısı: ${peakCount}`);
 
     } catch (e) {
@@ -144,7 +150,7 @@ function runSGWizardAsync() {
     return new Promise((resolve) => {
         const testData = state.signal;
 
-        let minW = 5, maxW = 51, minO = 2, maxO = 4;
+        let minW = 5, maxW = 51, minO = 2, maxO = 3;
 
         let results = [];
         for (let w = minW; w <= maxW; w += 2) {
@@ -178,6 +184,34 @@ function runSGWizardAsync() {
         } else {
             resolve();
         }
+    });
+}
+
+/**
+ * Smooth sinyali raw sinyale uygular (confirm dialog olmadan).
+ * applySmoothingToRaw()'un otomasyon versiyonu.
+ */
+function applySmoothToRawAsync() {
+    return new Promise((resolve) => {
+        if (!state.isSmoothEnabled || !state.smoothedSignal) {
+            console.warn("Auto: Smooth not enabled, skipping applySmoothToRaw");
+            resolve();
+            return;
+        }
+
+        // Raw sinyali smoothed ile değiştir
+        state.signal.set(state.smoothedSignal);
+        updateState({
+            isSmoothEnabled: false,
+            smoothedSignal: null,
+            smoothDerivativeSignal: null
+        });
+
+        if (elements.sgToggleBtn) elements.sgToggleBtn.classList.remove("active-green");
+        if (elements.sgSettingsPanel) elements.sgSettingsPanel.classList.remove("show");
+
+        // recalcFilters'ı çalıştır ve bekle
+        waitForRecalcFilters().then(resolve);
     });
 }
 
@@ -290,6 +324,14 @@ function runHistogramAndSetBaseline() {
  */
 function runThresholdDetectionAuto(sigma, n, minWidth) {
     return new Promise((resolve) => {
+        // Eşik değeri = baseline + n × σ
+        //
+        // Gaussian gürültü modeli: baseline etrafındaki gürültü ≈ N(μ, σ²)
+        //   n=3 → %99.7 gürültü reddedilir (3-sigma kuralı)
+        //   n=5 → %99.99994 gürültü reddedilir
+        //
+        // Nükleer/parçacık fiziğinde "discriminator threshold" olarak bilinir.
+        // Ref: Knoll, "Radiation Detection and Measurement", 4th Ed., §17.II
         const threshold = state.baselineValue + n * sigma;
 
         console.log(`Auto Threshold: baseline=${state.baselineValue.toFixed(6)}, ${n}×σ=${(n * sigma).toFixed(6)}, threshold=${threshold.toFixed(6)}, minWidth=${minWidth}`);

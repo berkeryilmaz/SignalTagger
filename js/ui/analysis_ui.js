@@ -1,4 +1,16 @@
-// UI: Analysis & Charts
+/**
+ * UI: Analysis & Charts — Analiz Tablosu ve Dağılım Grafikleri
+ *
+ * ─── Analiz Tablosu Sütun Açıklamaları ─────────────────────────
+ *
+ * ∑(V)     = Σ (V(tᵢ) - baseline)     → Baseline düşülmüş gerilim toplamı
+ * ∑(V²)    = Σ (V(tᵢ) - baseline)²   → Gerilim kare toplamı
+ * Charge   = ∑(V) × dt / R            → Coulomb (yük)
+ * Energy   = ∑(V²) × dt / R           → Joule (enerji)
+ * FWHM     = Yarı yükseklikte tam genişlik (sample cinsinden)
+ *
+ * Fizik hesaplamalarının detayları: physics.js
+ */
 
 
 // Global variables for sorting are no longer needed with DataTables
