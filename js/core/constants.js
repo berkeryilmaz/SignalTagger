@@ -115,7 +115,7 @@ const SCOPE_DIVS_HORIZONTAL = 15.2;
  *   Offset ayarında 2 division = %100 olarak kodlanır.
  *   offset_divs = offset_yüzde × 2 / 100
  */
-const ADC_HALF_RANGE = 2048;
+const ADC_HALF_RANGE = 2000;
 const SCOPE_DIVS_VERTICAL = 10;
 const OFFSET_SCALE_FACTOR = 2 / 100;  // 2 div = %100
 
