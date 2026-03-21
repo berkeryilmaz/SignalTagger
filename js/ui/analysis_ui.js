@@ -1,23 +1,21 @@
 // UI: Analysis & Charts
 
-// UI: Analysis & Charts
 
 // Global variables for sorting are no longer needed with DataTables
 
-function renderAnalysisTable() {
-    let tableBody = document.getElementById("analysisTableBody");
-    if (!tableBody) return;
+function renderAnalysisTable(forceRebuild = false) {
+    if (!window.analysisData) window.analysisData = [];
 
-    if (!window.analysisData || window.analysisData.length === 0) {
-        // DataTables doesn't like empty bodies on init if we want to add data later easily, 
-        // but let's clear it.
-        if ($.fn.DataTable.isDataTable('#analysisTable')) {
-            $('#analysisTable').DataTable().clear().draw();
-        } else {
-            tableBody.innerHTML = `<tr><td colspan="8" class="table-empty-msg">No labeled regions found. Use "Manage Classes" to add labels.</td></tr>`;
-        }
-        return;
-    }
+    // Calculate Best Units for Physics Columns
+    // 1. Extract arrays
+    const charges = window.analysisData.map(d => d.charge);
+    const energies = window.analysisData.map(d => d.energy);
+    const energyEVs = window.analysisData.map(d => d.energyEV);
+
+    // 2. Get Scale Factors
+    const qUnit = window.calculateColumnUnit ? window.calculateColumnUnit(charges) : { scale: 1e9, prefix: 'n' };
+    const eUnit = window.calculateColumnUnit ? window.calculateColumnUnit(energies) : { scale: 1e12, prefix: 'p' };
+    const evUnit = window.calculateColumnUnit ? window.calculateColumnUnit(energyEVs) : { scale: 1, prefix: '' };
 
     // Prepare data for DataTables
     const tableData = window.analysisData.map(row => {
@@ -31,60 +29,100 @@ function renderAnalysisTable() {
             start: row.start,
             end: row.end,
             width: row.width,
-            fwhm: row.fwhm,
-            maxVal: row.maxVal,
-            area: row.area,
-            rawLabel: row.label, // for coloring or other needs
-            DT_RowId: `row_${row.id}` // helps with selection
+            fwhm: roundToPrecision(row.fwhm),
+            maxVal: roundToPrecision(row.maxVal),
+            area: roundToPrecision(row.area),
+            sumVSq: roundToPrecision(row.sumVSq),
+
+            // Numeric Scaled Values
+            charge: roundToPrecision(row.charge * qUnit.scale),
+            energy: roundToPrecision(row.energy * eUnit.scale),
+            energyEV: roundToPrecision(row.energyEV * evUnit.scale),
+
+            rawLabel: row.label,
+            DT_RowId: `row_${row.id}`
         };
     });
 
+    // Column Definitions with Dynamic Headers
+    const columns = [
+        { data: 'id', title: 'ID' },
+        { data: 'className', title: 'Class' },
+        { data: 'start', title: 'Start' },
+        { data: 'end', title: 'End' },
+        { data: 'width', title: 'Width (N)' },
+        { data: 'fwhm', title: 'FWHM' },
+        { data: 'maxVal', title: 'Max Voltage', className: 'text-peak-color' },
+        { data: 'area', title: '∑(V) (V·s)' },
+        { data: 'sumVSq', title: '∑(V²) (V²·s)' },
+        { data: 'charge', title: `Charge (${qUnit.prefix}C)` },
+        { data: 'energy', title: `Energy (${eUnit.prefix}J)` },
+        { data: 'energyEV', title: `Energy (${evUnit.prefix}eV)` }
+    ];
+
+    // Check if we need to rebuild the table (if headers changed)
+    const prevUnits = state.lastAnalysisUnits || {};
+    const unitsChanged = prevUnits.q !== qUnit.prefix || prevUnits.e !== eUnit.prefix || prevUnits.ev !== evUnit.prefix;
+
+    // Update state
+    state.lastAnalysisUnits = { q: qUnit.prefix, e: eUnit.prefix, ev: evUnit.prefix };
+
     if ($.fn.DataTable.isDataTable('#analysisTable')) {
         let dt = $('#analysisTable').DataTable();
-        dt.clear();
-        dt.rows.add(tableData);
-        dt.draw();
+
+        if (unitsChanged || forceRebuild) {
+            // Full Rebuild required if headers change OR forced
+            dt.destroy();
+            $('#analysisTable').empty(); // Remove old headers
+            initDataTable(tableData, columns);
+        } else {
+            // Fast Update (Data only)
+            dt.clear();
+            dt.rows.add(tableData);
+            dt.draw(false); // false = preserve paging
+        }
     } else {
-        // Initialize
-        $('#analysisTable').DataTable({
-            data: tableData,
-            columns: [
-                { data: 'id', title: 'ID' },
-                { data: 'className', title: 'Class' },
-                { data: 'start', title: 'Start' },
-                { data: 'end', title: 'End' },
-                { data: 'width', title: 'Width (N)' },
-                { data: 'fwhm', title: 'FWHM' },
-                { data: 'maxVal', title: 'Max Voltage', className: 'text-peak-color' },
-                { data: 'area', title: 'Area (V·s)' }
-            ],
-            paging: true,
-            pageLength: 5,
-            lengthMenu: [5, 10, 20, 50],
-            lengthChange: true,
-            scrollY: false, // Let pagination control height
-            scrollCollapse: true,
-            searching: false,
-            ordering: true,
-            info: true,
-            autoWidth: false,
-            // Theme integration
-            createdRow: function (row, data, dataIndex) {
-                $(row).on('click', function () {
-                    $('#analysisTableBody tr').removeClass('selected');
-                    $(this).addClass('selected');
-                    if (window.jumpToCallback) window.jumpToCallback(data.start, data.end);
-                });
-            }
-        });
+        // First Init
+        initDataTable(tableData, columns);
     }
 }
 
+function initDataTable(data, columns) {
+    $('#analysisTable').DataTable({
+        data: data,
+        columns: columns,
+        paging: true,
+        pageLength: 5,
+        lengthMenu: [5, 10, 20, 50],
+        lengthChange: true,
+        scrollY: false,
+        scrollCollapse: true,
+        searching: false,
+        ordering: true,
+        info: true,
+        autoWidth: false,
+        destroy: true, // Ensure we can destroy later
+        language: {
+            emptyTable: "No labeled regions found. Use 'Manage Classes' to add labels."
+        },
+        createdRow: function (row, data, dataIndex) {
+            $(row).on('click', function () {
+                if (window.jumpToCallback) window.jumpToCallback(data.start, data.end);
+            });
+        }
+    });
+}
+
 function showPeakDistributions(e) {
-    if (e) e.stopPropagation();
+    // Robust event handling
+    if (e && e.stopPropagation) {
+        e.stopPropagation();
+    } else if (window.event) {
+        window.event.cancelBubble = true;
+    }
+
     if (!state.signal || state.signal.length === 0) return alert("Load a file first!");
 
-    // Ensure analysis is up to date
     if (!window.analysisData || window.analysisData.length === 0) {
         if (window.updatePeakAnalysis) window.updatePeakAnalysis();
     }
@@ -93,21 +131,20 @@ function showPeakDistributions(e) {
 
     if (window.openModal) window.openModal('peakDistModal');
 
-    // Draw 3 charts with Auto-Binning (Freedman-Diaconis)
     setTimeout(() => {
-        // Defines
         const types = [
             { key: 'width', inputId: 'binsWidth', dataFn: d => d.width },
             { key: 'fwhm', inputId: 'binsFWHM', dataFn: d => d.fwhm },
             { key: 'voltage', inputId: 'binsVoltage', dataFn: d => d.maxVal },
-            { key: 'area', inputId: 'binsArea', dataFn: d => d.area }
+            { key: 'area', inputId: 'binsArea', dataFn: d => d.area },
+            { key: 'sumVSq', inputId: 'binsSumVSq', dataFn: d => d.sumVSq },
+            { key: 'charge', inputId: 'binsCharge', dataFn: d => d.charge },
+            { key: 'energy', inputId: 'binsEnergy', dataFn: d => d.energy },
+            { key: 'energyEV', inputId: 'binsEnergyEV', dataFn: d => d.energyEV }
         ];
 
         types.forEach(type => {
-            // 1. Extract Data
             const values = window.analysisData.map(type.dataFn);
-
-            // 2. Calculate Optimal Bins if helper exists
             let optimalBins = 20;
             if (window.calculateOptimalBins) {
                 try {
@@ -115,11 +152,9 @@ function showPeakDistributions(e) {
                 } catch (err) { console.error(err); }
             }
 
-            // 3. Update Input
             const input = document.getElementById(type.inputId);
             if (input) input.value = optimalBins;
 
-            // 4. Render Chart
             if (window.updateSingleDistChart) {
                 window.updateSingleDistChart(type.key);
             }
@@ -128,7 +163,6 @@ function showPeakDistributions(e) {
 }
 
 // Global exposure
-// Global exposure
-window.renderAnalysisTable = renderAnalysisTable;
 window.renderAnalysisTable = renderAnalysisTable;
 window.showPeakDistributions = showPeakDistributions;
+

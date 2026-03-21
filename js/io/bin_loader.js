@@ -121,12 +121,12 @@ class BinLoader {
 
         let dataBlockIndex = 0;
         channels.forEach((channel, i) => {
-            // Only read data if channel is ON
-            if (channel.display === 'ON') {
-                if (dataBlockIndex < indices.length) {
-                    const start = indices[dataBlockIndex] + 4; // Skip delimiter
-                    dataBlockIndex++;
+            if (dataBlockIndex < indices.length) {
+                const start = indices[dataBlockIndex] + 4; // Skip delimiter
+                dataBlockIndex++; // Her kanal slotu için data block index ilerler (ON veya OFF)
 
+                // Only read data if channel is ON
+                if (channel.display === 'ON') {
                     // We need datalen int16s -> datalen * 2 bytes
                     const neededBytes = dataLen * 2;
 
@@ -142,13 +142,13 @@ class BinLoader {
                     channel.data = this.convertToVoltage(channel.raw_data, channel);
                     channel.successful_read = true;
                 } else {
-                    // Defines channel as ON but no data found
+                    // Channel is OFF
                     channel.raw_data = new Float32Array(dataLen).fill(0);
                     channel.data = new Float32Array(dataLen).fill(0);
                     channel.successful_read = false;
                 }
             } else {
-                // Channel is OFF, fill with zeros or ignore
+                // No more data blocks available
                 channel.raw_data = new Float32Array(dataLen).fill(0);
                 channel.data = new Float32Array(dataLen).fill(0);
                 channel.successful_read = false;
@@ -272,6 +272,36 @@ class BinLoader {
         }
 
         return merged;
+    }
+
+    /**
+     * Timebase scale string'ini saniye cinsine çevirir.
+     * Örnek: "200ns" → 200e-9, "1us" → 1e-6, "500ps" → 500e-12
+     *
+     * @param {string} scaleStr - Timebase scale string'i (ör. "200ns", "1us")
+     * @returns {number} Saniye cinsinden değer
+     */
+    parseTimeScale(scaleStr) {
+        if (!scaleStr) return 0;
+        let s = scaleStr.toString().toLowerCase().trim();
+
+        const units = [
+            { suffix: 'ps', mult: 1e-12 },
+            { suffix: 'ns', mult: 1e-9 },
+            { suffix: 'us', mult: 1e-6 },
+            { suffix: 'µs', mult: 1e-6 },
+            { suffix: 'ms', mult: 1e-3 },
+            { suffix: 's',  mult: 1 }
+        ];
+
+        for (const u of units) {
+            if (s.endsWith(u.suffix)) {
+                return parseFloat(s.replace(u.suffix, '')) * u.mult;
+            }
+        }
+
+        // Birim yoksa direkt sayı olarak dön (saniye varsay)
+        return parseFloat(s) || 0;
     }
 
     normalizeKeys(obj) {

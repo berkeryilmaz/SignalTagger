@@ -1,3 +1,11 @@
+/**
+ * Yardımcı Fonksiyonlar (Utils)
+ * ===============================
+ *
+ * Genel amaçlı yardımcı fonksiyonlar. Birim çarpanları ve
+ * ön ek tabloları constants.js'den alınır.
+ */
+
 // Core Utils
 
 function roundToPrecision(num) {
@@ -8,7 +16,7 @@ function roundToPrecision(num) {
 function getThemeColors() {
     const isLight = document.body.getAttribute('data-theme') === 'light';
     return {
-        bg: isLight ? '#ffffff' : '#1e1e1e', // Card BG
+        bg: isLight ? '#ffffff' : '#1e1e1e',
         plotBg: isLight ? '#ffffff' : '#1e1e1e',
         text: isLight ? '#1f2937' : '#e0e0e0',
         textMuted: isLight ? '#6b7280' : '#a0a0a0',
@@ -30,6 +38,70 @@ function getRandomColor() {
     }
     return color;
 }
+
+/**
+ * Birim string'inden SI çarpanını döndürür.
+ * SI_PREFIXES ve BASE_UNITS constants.js'den alınır.
+ */
+function getMultiplier(unit) {
+    if (!unit) return 1;
+
+    // 1. SI ön eki olarak eşleşme (constants.js)
+    if (SI_PREFIXES.hasOwnProperty(unit)) return SI_PREFIXES[unit];
+
+    // 2. Temel birim kontrolü (constants.js)
+    if (BASE_UNITS.includes(unit)) return 1;
+
+    // 3. String'in ilk karakterinden ön ek çıkar (ör: "ns" → "n")
+    const firstChar = unit.charAt(0);
+    if (SI_PREFIXES.hasOwnProperty(firstChar)) {
+        return SI_PREFIXES[firstChar];
+    }
+
+    return 1;
+}
+
+/**
+ * Değeri okunabilir birim string'ine dönüştürür.
+ * PREFIX_SCALE_TABLE constants.js'den alınır.
+ */
+function formatMetric(value, baseUnit) {
+    if (value === 0) return `0 ${baseUnit}`;
+
+    const absVal = Math.abs(value);
+
+    for (let i = 0; i < PREFIX_SCALE_TABLE.length; i++) {
+        if (absVal >= PREFIX_SCALE_TABLE[i].limit * 0.9) {
+            let scaled = value / PREFIX_SCALE_TABLE[i].limit;
+            return `${scaled.toFixed(3)} ${PREFIX_SCALE_TABLE[i].prefix}${baseUnit}`;
+        }
+    }
+    return `${value.toExponential(2)} ${baseUnit}`;
+}
+
+window.getMultiplier = getMultiplier;
+window.formatMetric = formatMetric;
+
+/**
+ * Bir sütundaki değerler için en uygun birim ölçeğini hesaplar.
+ * PREFIX_SCALE_TABLE constants.js'den alınır.
+ */
+function calculateColumnUnit(values) {
+    let max = 0;
+    for (let v of values) {
+        if (Math.abs(v) > max) max = Math.abs(v);
+    }
+
+    if (max === 0) return { scale: 1, prefix: '' };
+
+    for (let i = 0; i < PREFIX_SCALE_TABLE.length; i++) {
+        if (max >= PREFIX_SCALE_TABLE[i].limit) {
+            return { scale: 1 / PREFIX_SCALE_TABLE[i].limit, prefix: PREFIX_SCALE_TABLE[i].prefix };
+        }
+    }
+    return { scale: 1, prefix: '' };
+}
+window.calculateColumnUnit = calculateColumnUnit;
 
 window.roundToPrecision = roundToPrecision;
 window.getThemeColors = getThemeColors;
