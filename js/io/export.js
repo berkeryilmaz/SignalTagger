@@ -119,5 +119,28 @@ function downloadCSV(content, filename) {
     }
 }
 
+/**
+ * Sadece sinyal verisini (index + voltage) dışa aktarır.
+ * Precision, toolbar'daki dataPrecision (Prec) ayarına göre
+ * roundToPrecision ile uygulanır.
+ */
+function exportSignalOnly() {
+    if (!state.signal || state.signal.length === 0) return alert("Nothing to export!");
+
+    const precision = state.dataPrecision;
+    const factor = Math.pow(10, precision);
+
+    let rows = [];
+    for (let i = 0; i < state.signal.length; i++) {
+        const v = Math.round(state.signal[i] * factor) / factor;
+        rows.push(`${i},${v}`);
+    }
+
+    let csvContent = "index,voltage\n" + rows.join("\n");
+    downloadCSV(csvContent, `signal_only_${Date.now()}.csv`);
+    closeModal('exportModal');
+}
+
 window.performExport = performExport;
 window.exportAnalysisTable = exportAnalysisTable;
+window.exportSignalOnly = exportSignalOnly;
