@@ -173,14 +173,15 @@ function updateHistoChartUI(histoData, gaussData) {
 }
 
 /**
- * Dağılım grafiği oluşturur (KDE + Histogram).
- * statistics.js'deki calculateKDE() ve calculateOptimalBins() kullanılır.
+ * Dağılım grafiği oluşturur (sadece Histogram).
+ * statistics.js'deki calculateOptimalBins() kullanılır.
+ *
+ * Zoom: Highcharts'ın zoomType:'x' özelliği kullanılır.
+ * Histogram, baseSeries (scatter) üzerinden otomatik hesaplanır.
+ * Bin sayısı sabit kalır — sadece bin input değiştirildiğinde güncellenir.
  */
 function createDistributionChart(containerId, dataArray, title, xTitle, color, binCount, chartType) {
     const tc = getThemeColors();
-    let kdeResult = calculateKDE(dataArray, binCount);
-    let densityData = kdeResult.points;
-    const originalData = dataArray;
 
     Highcharts.chart(containerId, {
         chart: {
@@ -190,96 +191,30 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
             zoomType: 'x',
             panning: true,
             panKey: 'shift',
-            alignTicks: false
+            resetZoomButton: {
+                theme: {
+                    fill: tc.bg,
+                    stroke: tc.axisLine,
+                    style: { color: tc.text }
+                }
+            }
         },
         boost: { enabled: false },
         title: { text: null },
         credits: { enabled: false },
-        legend: {
-            enabled: true,
-            itemStyle: { color: tc.textMuted },
-            itemHoverStyle: { color: tc.text },
-            align: 'right',
-            verticalAlign: 'top',
-            layout: 'vertical',
-            floating: true,
-            x: -10,
-            y: 35
-        },
+        legend: { enabled: false },
         xAxis: {
             title: { text: xTitle, style: { color: tc.textMuted } },
             lineColor: tc.axisLine,
-            labels: { style: { color: tc.textMuted } },
-            events: {
-                afterSetExtremes: function (e) {
-                    const chart = this.chart;
-
-                    if (e.min == null || e.max == null) {
-                        if (chartType && window.updateSingleDistChart) {
-                            setTimeout(() => {
-                                window.updateSingleDistChart(chartType);
-                            }, 0);
-                        }
-                        return;
-                    }
-
-                    let currentData = originalData.filter(v => v >= e.min && v <= e.max);
-
-                    if (currentData.length < 2) return;
-                    let dMin = e.min;
-                    let dMax = e.max;
-                    if (dMax <= dMin) return;
-
-                    const histSeries = chart.get('series_hist');
-                    const rawSeries = chart.get('series_raw');
-                    const kdeSeries = chart.get('series_kde');
-
-                    if (!rawSeries) return;
-
-                    let newBinCount = calculateOptimalBins(currentData);
-
-                    if (chartType) {
-                        const inputMap = {
-                            'width': 'binsWidth', 'fwhm': 'binsFWHM',
-                            'voltage': 'binsVoltage', 'area': 'binsArea',
-                            'sumVSq': 'binsSumVSq', 'charge': 'binsCharge',
-                            'energy': 'binsEnergy', 'energyEV': 'binsEnergyEV'
-                        };
-                        const inputId = inputMap[chartType];
-                        if (inputId) {
-                            const el = document.getElementById(inputId);
-                            if (el) el.value = newBinCount;
-                        }
-                    }
-
-                    rawSeries.setData(currentData, false);
-
-                    if (kdeSeries && kdeSeries.visible) {
-                        let newKde = calculateKDE(currentData, newBinCount);
-                        kdeSeries.setData(newKde.points, false);
-                    }
-
-                    if (histSeries && histSeries.options.binsNumber !== newBinCount) {
-                        histSeries.update({ binsNumber: newBinCount }, false);
-                    }
-
-                    chart.redraw();
-                }
-            }
+            labels: { style: { color: tc.textMuted } }
         },
-        yAxis: [{
+        yAxis: {
             title: { text: 'Count', style: { color: color } },
             gridLineColor: tc.grid,
             labels: { style: { color: tc.textMuted } },
             allowDecimals: false,
             min: 0
-        }, {
-            title: { text: 'Density', style: { color: tc.text } },
-            opposite: true,
-            gridLineWidth: 0,
-            labels: { enabled: false },
-            min: 0
-        }],
+        },
         series: [{
             name: 'Histogram',
             type: 'histogram',
@@ -288,8 +223,7 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
             color: color,
             binsNumber: binCount,
             zIndex: 1,
-            yAxis: 0,
-            showInLegend: true
+            showInLegend: false
         }, {
             name: 'Data',
             type: 'scatter',
@@ -297,16 +231,6 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
             id: 'series_raw',
             visible: false,
             showInLegend: false
-        }, {
-            name: 'Density Fit (KDE)',
-            type: 'spline',
-            data: densityData,
-            id: 'series_kde',
-            yAxis: 1,
-            color: tc.text,
-            zIndex: 2,
-            marker: { enabled: false },
-            showInLegend: true
         }]
     });
 }
