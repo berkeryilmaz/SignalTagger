@@ -274,6 +274,5 @@ window.draw = function (preserveWindow) {
     if (window.drawScopeScreen) window.drawScopeScreen();
 };
 
-window.draw = draw;
 window.updateSliderMax = updateSliderMax;
 window.toggleDerivative = toggleDerivative;

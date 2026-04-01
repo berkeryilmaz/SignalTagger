@@ -1,0 +1,696 @@
+/* ═══════════════════════════════════════════════════════════════
+   Node Editor — Styles
+   Uses app CSS variables for automatic dark/light theme support.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Category Colors ─────────────────────────────────────────── */
+:root {
+    --ne-cat-input: #00bcd4;
+    --ne-cat-math: #ff9800;
+    --ne-cat-logic: #009688;
+    --ne-cat-signalops: #e91e63;
+    --ne-cat-statistics: #9c27b0;
+    --ne-cat-analysis: #4caf50;
+    --ne-cat-physics: #2196f3;
+    --ne-cat-output: #f44336;
+    --ne-port-signal: #00e676;
+    --ne-port-number: #ffab40;
+    --ne-port-array: #40c4ff;
+    --ne-port-boolean: #ea80fc;
+    --ne-port-any: #bdbdbd;
+}
+
+/* ─── Full-Screen Overlay ─────────────────────────────────────── */
+#nodeEditorModal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg-color);
+    z-index: 3000;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#nodeEditorModal.active {
+    display: flex;
+}
+
+/* ─── Top Toolbar ─────────────────────────────────────────────── */
+.ne-toolbar {
+    height: 46px;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.ne-toolbar-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 12px;
+}
+
+.ne-toolbar-title svg {
+    color: var(--accent-color);
+}
+
+.ne-toolbar .divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border-color);
+    margin: 0 4px;
+}
+
+.ne-toolbar-btn {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background-color 0.2s;
+    height: 30px;
+    white-space: nowrap;
+}
+
+.ne-toolbar-btn:hover {
+    background: var(--border-color);
+}
+
+.ne-toolbar-btn.ne-run-btn {
+    background: linear-gradient(135deg, #7c4dff, #00e676);
+    border: none;
+    color: #fff;
+    font-weight: 600;
+    padding: 5px 16px;
+}
+
+.ne-toolbar-btn.ne-run-btn:hover {
+    opacity: 0.9;
+}
+
+.ne-toolbar-btn.ne-run-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ne-toolbar-close {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+}
+
+.ne-toolbar-close:hover {
+    color: var(--text-main);
+    border-color: var(--text-main);
+}
+
+/* ─── Main Layout ─────────────────────────────────────────────── */
+.ne-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+
+/* ─── Left Palette ────────────────────────────────────────────── */
+.ne-palette {
+    width: 220px;
+    background: var(--card-bg);
+    border-right: 1px solid var(--border-color);
+    overflow-y: auto;
+    flex-shrink: 0;
+    z-index: 5;
+}
+
+.ne-palette-search {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ne-palette-search input {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.ne-palette-search input:focus {
+    border-color: var(--accent-color);
+}
+
+.ne-palette-category {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.ne-palette-category-header {
+    padding: 8px 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.ne-palette-category-header:hover {
+    background: rgba(128, 128, 128, 0.08);
+}
+
+.ne-palette-category-header .ne-cat-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.ne-palette-category-header .ne-cat-chevron {
+    margin-left: auto;
+    transition: transform 0.2s;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+}
+
+.ne-palette-category.collapsed .ne-cat-chevron {
+    transform: rotate(-90deg);
+}
+
+.ne-palette-category.collapsed .ne-palette-items {
+    display: none;
+}
+
+.ne-palette-items {
+    padding: 2px 0;
+}
+
+.ne-palette-item {
+    padding: 6px 12px 6px 28px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, color 0.15s;
+    user-select: none;
+}
+
+.ne-palette-item:hover {
+    background: rgba(128, 128, 128, 0.12);
+    color: var(--text-main);
+}
+
+.ne-palette-item:active {
+    cursor: grabbing;
+}
+
+.ne-palette-item .ne-item-icon {
+    font-size: 0.9rem;
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* ─── Canvas Area ─────────────────────────────────────────────── */
+.ne-canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-color);
+}
+
+.ne-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 10000px;
+    height: 10000px;
+    transform-origin: 0 0;
+}
+
+/* Grid background */
+.ne-canvas-wrap::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+        radial-gradient(circle, var(--border-color) 1px, transparent 1px);
+    background-size: 20px 20px;
+    opacity: 0.5;
+}
+
+/* ─── SVG Connections Layer ───────────────────────────────────── */
+.ne-svg-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: visible;
+}
+
+.ne-svg-layer path.ne-connection {
+    fill: none;
+    stroke-width: 2.5;
+    pointer-events: stroke;
+    cursor: pointer;
+    transition: stroke-width 0.15s;
+}
+
+.ne-svg-layer path.ne-connection:hover {
+    stroke-width: 4;
+}
+
+.ne-svg-layer path.ne-connection.selected {
+    stroke-width: 4;
+    filter: drop-shadow(0 0 4px currentColor);
+}
+
+.ne-svg-layer path.ne-temp-connection {
+    fill: none;
+    stroke: var(--accent-color);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* ─── Node Card ───────────────────────────────────────────────── */
+.ne-node {
+    position: absolute;
+    min-width: 180px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    z-index: 2;
+    cursor: grab;
+    user-select: none;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.ne-node:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.ne-node.selected {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.3), 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.ne-node.dragging {
+    cursor: grabbing;
+    z-index: 100;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.ne-node.error {
+    border-color: #f44336;
+    box-shadow: 0 0 0 2px rgba(244, 67, 54, 0.3);
+}
+
+.ne-node.success {
+    border-color: #4caf50;
+}
+
+/* Node Header */
+.ne-node-header {
+    padding: 8px 12px;
+    border-radius: 9px 9px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #fff;
+    position: relative;
+}
+
+.ne-node-header .ne-node-icon {
+    font-size: 0.9rem;
+}
+
+.ne-node-header .ne-node-delete {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 0.9rem;
+    border-radius: 3px;
+    display: none;
+    height: auto;
+    min-width: unset;
+}
+
+.ne-node:hover .ne-node-delete {
+    display: block;
+}
+
+.ne-node-header .ne-node-delete:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Node Body — Ports */
+.ne-node-body {
+    padding: 6px 0;
+}
+
+.ne-port-row {
+    display: flex;
+    align-items: center;
+    padding: 3px 12px;
+    font-size: 0.75rem;
+    position: relative;
+}
+
+.ne-port-row.input {
+    justify-content: flex-start;
+}
+
+.ne-port-row.output {
+    justify-content: flex-end;
+}
+
+/* Port dot */
+.ne-port {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid;
+    background: var(--card-bg);
+    cursor: crosshair;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    transition: transform 0.15s, box-shadow 0.15s;
+    z-index: 5;
+}
+
+.ne-port:hover {
+    transform: translateY(-50%) scale(1.3);
+    box-shadow: 0 0 6px currentColor;
+}
+
+.ne-port.input {
+    left: -7px;
+}
+
+.ne-port.output {
+    right: -7px;
+}
+
+.ne-port.connected {
+    background: currentColor;
+}
+
+/* Port type colors */
+.ne-port[data-port-type="signal"] { color: var(--ne-port-signal); border-color: var(--ne-port-signal); }
+.ne-port[data-port-type="number"] { color: var(--ne-port-number); border-color: var(--ne-port-number); }
+.ne-port[data-port-type="array"]  { color: var(--ne-port-array);  border-color: var(--ne-port-array);  }
+.ne-port[data-port-type="boolean"]{ color: var(--ne-port-boolean);border-color: var(--ne-port-boolean);}
+.ne-port[data-port-type="any"]    { color: var(--ne-port-any);    border-color: var(--ne-port-any);    }
+
+.ne-port-label {
+    color: var(--text-muted);
+    padding: 0 6px;
+    white-space: nowrap;
+}
+
+/* Node Parameters */
+.ne-node-params {
+    padding: 4px 12px 8px;
+    border-top: 1px solid var(--border-color);
+}
+
+.ne-param-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.ne-param-row label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    min-width: 50px;
+}
+
+.ne-param-row input,
+.ne-param-row select {
+    flex: 1;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    max-width: 100px;
+}
+
+/* ─── Minimap ─────────────────────────────────────────────────── */
+.ne-minimap {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    width: 200px;
+    height: 140px;
+    min-width: 120px;
+    min-height: 80px;
+    max-width: 400px;
+    max-height: 300px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    z-index: 10;
+    opacity: 0.85;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    resize: both;
+    direction: rtl;
+}
+
+.ne-minimap-viewport {
+    position: absolute;
+    border: 1.5px solid var(--accent-color);
+    background: rgba(0, 188, 212, 0.08);
+    pointer-events: none;
+}
+
+.ne-minimap-node {
+    position: absolute;
+    border-radius: 2px;
+    opacity: 0.7;
+}
+
+/* ─── Status Bar ──────────────────────────────────────────────── */
+.ne-status {
+    height: 26px;
+    background: var(--card-bg);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    gap: 20px;
+    flex-shrink: 0;
+}
+
+.ne-status-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.ne-status .ne-status-success {
+    color: #4caf50;
+}
+
+.ne-status .ne-status-error {
+    color: #f44336;
+}
+
+/* ─── Context Menu ────────────────────────────────────────────── */
+.ne-context-menu {
+    position: fixed;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 5000;
+    min-width: 160px;
+    padding: 4px 0;
+    display: none;
+}
+
+.ne-context-menu.active {
+    display: block;
+}
+
+.ne-context-item {
+    padding: 7px 14px;
+    font-size: 0.78rem;
+    color: var(--text-main);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s;
+}
+
+.ne-context-item:hover {
+    background: rgba(128, 128, 128, 0.12);
+}
+
+.ne-context-item.danger {
+    color: #f44336;
+}
+
+.ne-context-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
+}
+
+/* ─── Zoom Info ────────────────────────────────────────────────── */
+.ne-zoom-info {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    z-index: 10;
+    opacity: 0.85;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ne-zoom-info button {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 1px 4px;
+    font-size: 0.85rem;
+    height: auto;
+    min-width: unset;
+}
+
+.ne-zoom-info button:hover {
+    color: var(--text-main);
+    background: transparent;
+}
+
+/* ─── Execution Overlay ───────────────────────────────────────── */
+.ne-executing-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 500;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(2px);
+}
+
+.ne-executing-overlay.active {
+    display: flex;
+}
+
+.ne-executing-msg {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px 30px;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.ne-executing-msg .spinner {
+    margin: 0 auto 10px;
+}
+
+/* ─── Drop Ghost ──────────────────────────────────────────────── */
+.ne-drop-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 4000;
+    opacity: 0.8;
+    transform: translate(-50%, -50%);
+    background: var(--card-bg);
+    border: 2px dashed var(--accent-color);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 0.78rem;
+    color: var(--accent-color);
+    font-weight: 600;
+    white-space: nowrap;
+    display: none;
+}
+
+/* ─── Animations ──────────────────────────────────────────────── */
+@keyframes ne-node-appear {
+    from { opacity: 0; transform: scale(0.8); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.ne-node {
+    animation: ne-node-appear 0.2s ease-out;
+}
+
+@keyframes ne-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+    50%      { box-shadow: 0 0 8px 2px currentColor; }
+}
+
+.ne-node.executing {
+    animation: ne-pulse 1s ease-in-out infinite;
+    border-color: var(--accent-color);
+}
+
+/* ─── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .ne-palette {
+        width: 180px;
+    }
+    .ne-minimap {
+        display: none;
+    }
+}
