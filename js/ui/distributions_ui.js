@@ -71,8 +71,18 @@ function updateSingleDistChart(type) {
         }
     }
 
+    // Check log toggles
+    let useLogX = false;
+    let useLogY = false;
+    
+    let logxElem = document.getElementById('logx_' + type);
+    if (logxElem) useLogX = logxElem.checked;
+    
+    let logyElem = document.getElementById('logy_' + type);
+    if (logyElem) useLogY = logyElem.checked;
+
     let binCount = parseInt(document.getElementById(binInputId).value) || 20;
-    if (window.createDistributionChart) window.createDistributionChart(containerId, scaledData, title, xTitle, color, binCount, type);
+    if (window.createDistributionChart) window.createDistributionChart(containerId, scaledData, title, xTitle, color, binCount, type, useLogX, useLogY);
 }
 
 window.updateSingleDistChart = updateSingleDistChart;

@@ -14,6 +14,64 @@
  *   5. Histogram ve fit eğrisi çizilir (Highcharts)
  */
 
+window.calculateGaussianHistogram = function(dataArr, numBins) {
+    if (dataArr.length < 2) return null;
+
+    let sum = 0; for (let v of dataArr) sum += v;
+    let mean = sum / dataArr.length;
+    let sumSqDiff = 0; for (let v of dataArr) sumSqDiff += Math.pow(v - mean, 2);
+    let sigma = Math.sqrt(sumSqDiff / dataArr.length);
+
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+    for (let v of dataArr) {
+        if (v < minVal) minVal = v;
+        if (v > maxVal) maxVal = v;
+    }
+
+    let range = maxVal - minVal; if (range === 0) range = 1;
+    minVal -= range * 0.02; maxVal += range * 0.02;
+    let binWidth = (maxVal - minVal) / numBins;
+
+    let bins = new Array(numBins).fill(0);
+    for (let v of dataArr) {
+        let idx = Math.floor((v - minVal) / binWidth);
+        if (idx >= numBins) idx = numBins - 1;
+        if (idx < 0) idx = 0;
+        bins[idx]++;
+    }
+
+    let histoData = [];
+    let fitX = [], fitY = [];
+    let maxCount = 0, maxBinIdx = 0;
+
+    for (let i = 0; i < numBins; i++) {
+        let center = minVal + (i + 0.5) * binWidth;
+        let count = bins[i];
+        histoData.push([center, count]);
+        if (count > maxCount) { maxCount = count; maxBinIdx = i; }
+
+        if (count > 0) {
+            fitX.push(center);
+            fitY.push(count);
+        }
+    }
+
+    let peakCenter = minVal + (maxBinIdx + 0.5) * binWidth;
+    let initParams = [maxCount, peakCenter, sigma * 0.5];
+    let result = window.fitGaussianLM(fitX, fitY, initParams);
+
+    return {
+        fittedMean: result.mu,
+        fittedSigma: result.sigma,
+        fittedAmp: result.A,
+        histoData: histoData,
+        minVal: minVal,
+        maxVal: maxVal,
+        binWidth: binWidth
+    };
+};
+
 function runHistogramAnalysis(autoBins = false) {
     if (!state.signal || state.signal.length === 0) return alert("Load a file first!");
 
@@ -52,51 +110,13 @@ function runHistogramAnalysis(autoBins = false) {
     }
     const numBins = parseInt(document.getElementById("histoBins").value) || 100;
 
-    // Binleme
-    let minVal = Infinity;
-    let maxVal = -Infinity;
-    for (let v of dataArr) {
-        if (v < minVal) minVal = v;
-        if (v > maxVal) maxVal = v;
-    }
+    let histoResult = window.calculateGaussianHistogram(dataArr, numBins);
+    if (!histoResult) return;
 
-    let range = maxVal - minVal; if (range === 0) range = 1;
-    minVal -= range * 0.02; maxVal += range * 0.02;
-    let binWidth = (maxVal - minVal) / numBins;
-
-    let bins = new Array(numBins).fill(0);
-    for (let v of dataArr) {
-        let idx = Math.floor((v - minVal) / binWidth);
-        if (idx >= numBins) idx = numBins - 1;
-        if (idx < 0) idx = 0;
-        bins[idx]++;
-    }
-
-    let histoData = [];
-    let fitX = [], fitY = [];
-    let maxCount = 0, maxBinIdx = 0;
-
-    for (let i = 0; i < numBins; i++) {
-        let center = minVal + (i + 0.5) * binWidth;
-        let count = bins[i];
-        histoData.push([center, count]);
-        if (count > maxCount) { maxCount = count; maxBinIdx = i; }
-
-        if (count > 0) {
-            fitX.push(center);
-            fitY.push(count);
-        }
-    }
-
-    // Gaussian Fit (Levenberg-Marquardt, statistics.js)
-    let peakCenter = minVal + (maxBinIdx + 0.5) * binWidth;
-    let initParams = [maxCount, peakCenter, sigma * 0.5];
-
-    let result = fitGaussianLM(fitX, fitY, initParams);
-
-    let fittedMean = result.mu;
-    let fittedSigma = result.sigma;
-    let fittedAmp = result.A;
+    let fittedMean = histoResult.fittedMean;
+    let fittedSigma = histoResult.fittedSigma;
+    let fittedAmp = histoResult.fittedAmp;
+    let histoData = histoResult.histoData;
 
     updateState({ currentGaussianMean: fittedMean, currentHistoData: histoData });
 
@@ -180,7 +200,7 @@ function updateHistoChartUI(histoData, gaussData) {
  * Histogram, baseSeries (scatter) üzerinden otomatik hesaplanır.
  * Bin sayısı sabit kalır — sadece bin input değiştirildiğinde güncellenir.
  */
-function createDistributionChart(containerId, dataArray, title, xTitle, color, binCount, chartType) {
+function createDistributionChart(containerId, dataArray, title, xTitle, color, binCount, chartType, useLogX = false, useLogY = false) {
     const tc = getThemeColors();
 
     Highcharts.chart(containerId, {
@@ -206,14 +226,16 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
         xAxis: {
             title: { text: xTitle, style: { color: tc.textMuted } },
             lineColor: tc.axisLine,
-            labels: { style: { color: tc.textMuted } }
+            labels: { style: { color: tc.textMuted } },
+            type: useLogX ? 'logarithmic' : 'linear'
         },
         yAxis: {
             title: { text: 'Count', style: { color: color } },
             gridLineColor: tc.grid,
             labels: { style: { color: tc.textMuted } },
             allowDecimals: false,
-            min: 0
+            type: useLogY ? 'logarithmic' : 'linear',
+            ...(useLogY ? {} : { min: 0 })
         },
         series: [{
             name: 'Histogram',

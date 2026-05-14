@@ -72,7 +72,7 @@ header {
     background-color: var(--card-bg);
     border-bottom: 1px solid var(--border-color);
     padding: 0 15px;
-    height: 60px;
+    min-height: 48px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -101,8 +101,6 @@ header {
     align-items: center;
     flex-grow: 1;
     flex-wrap: wrap;
-    overflow: hidden;
-    max-height: 54px;
 }
 
 .toolbar-group {
