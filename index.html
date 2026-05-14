@@ -26,6 +26,7 @@
     <script src="js/libs/jquery.dataTables.min.js"></script>
 
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/node_editor.css">
 </head>
 
 <body>
@@ -244,6 +245,8 @@
                             <span class="input-label m-0">Bins</span>
                             <input type="number" id="binsWidth" min="5" max="500" step="1"
                                 class="input-dist-bins input-dist-width" onchange="updateSingleDistChart('width')">
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logx_width" onchange="updateSingleDistChart('width')"> Log X</label>
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logy_width" onchange="updateSingleDistChart('width')"> Log Y</label>
                         </div>
                     </div>
                     <div id="distChartWidth" class="chart-flex"></div>
@@ -257,6 +260,8 @@
                             <span class="input-label m-0">Bins</span>
                             <input type="number" id="binsFWHM" min="5" max="500" step="1"
                                 class="input-dist-bins input-dist-fwhm" onchange="updateSingleDistChart('fwhm')">
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logx_fwhm" onchange="updateSingleDistChart('fwhm')"> Log X</label>
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logy_fwhm" onchange="updateSingleDistChart('fwhm')"> Log Y</label>
                         </div>
                     </div>
                     <div id="distChartFWHM" class="chart-flex"></div>
@@ -270,6 +275,8 @@
                             <span class="input-label m-0">Bins</span>
                             <input type="number" id="binsVoltage" min="5" max="500" step="1"
                                 class="input-dist-bins input-dist-volt" onchange="updateSingleDistChart('voltage')">
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logx_voltage" onchange="updateSingleDistChart('voltage')"> Log X</label>
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logy_voltage" onchange="updateSingleDistChart('voltage')"> Log Y</label>
                         </div>
                     </div>
                     <div id="distChartVoltage" class="chart-flex"></div>
@@ -283,6 +290,8 @@
                             <span class="input-label m-0">Bins</span>
                             <input type="number" id="binsArea" min="5" max="500" step="1"
                                 class="input-dist-bins input-dist-area" onchange="updateSingleDistChart('area')">
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logx_area" onchange="updateSingleDistChart('area')"> Log X</label>
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logy_area" onchange="updateSingleDistChart('area')"> Log Y</label>
                         </div>
                     </div>
                     <div id="distChartArea" class="chart-flex"></div>
@@ -296,6 +305,8 @@
                             <span class="input-label m-0">Bins</span>
                             <input type="number" id="binsSumVSq" min="5" max="500" step="1"
                                 class="input-dist-bins input-dist-sumvsq" onchange="updateSingleDistChart('sumVSq')">
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logx_sumVSq" onchange="updateSingleDistChart('sumVSq')"> Log X</label>
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logy_sumVSq" onchange="updateSingleDistChart('sumVSq')"> Log Y</label>
                         </div>
                     </div>
                     <div id="distChartSumVSq" class="chart-flex"></div>
@@ -309,6 +320,8 @@
                             <span class="input-label m-0">Bins</span>
                             <input type="number" id="binsCharge" min="5" max="500" step="1"
                                 class="input-dist-bins input-dist-charge" onchange="updateSingleDistChart('charge')">
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logx_charge" onchange="updateSingleDistChart('charge')"> Log X</label>
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logy_charge" onchange="updateSingleDistChart('charge')"> Log Y</label>
                         </div>
                     </div>
                     <div id="distChartCharge" class="chart-flex"></div>
@@ -322,6 +335,8 @@
                             <span class="input-label m-0">Bins</span>
                             <input type="number" id="binsEnergy" min="5" max="500" step="1"
                                 class="input-dist-bins input-dist-energy" onchange="updateSingleDistChart('energy')">
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logx_energy" onchange="updateSingleDistChart('energy')"> Log X</label>
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logy_energy" onchange="updateSingleDistChart('energy')"> Log Y</label>
                         </div>
                     </div>
                     <div id="distChartEnergy" class="chart-flex"></div>
@@ -336,6 +351,8 @@
                             <input type="number" id="binsEnergyEV" min="5" max="500" step="1"
                                 class="input-dist-bins input-dist-energyev"
                                 onchange="updateSingleDistChart('energyEV')">
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logx_energyEV" onchange="updateSingleDistChart('energyEV')"> Log X</label>
+                            <label class="checkbox-wrapper"><input type="checkbox" id="logy_energyEV" onchange="updateSingleDistChart('energyEV')"> Log Y</label>
                         </div>
                     </div>
                     <div id="distChartEnergyEV" class="chart-flex"></div>
@@ -432,6 +449,9 @@
             <button class="btn-text-only" onclick="closeModal('autoAnalysisModal')">Cancel</button>
         </div>
     </div>
+
+    <!-- Node Editor Modal (Content generated by JS) -->
+    <div id="nodeEditorModal"></div>
 
     <!-- Channel Selection Modal (BIN Import) -->
     <div id="channelSelectModal" class="modal-overlay">
@@ -566,6 +586,14 @@
                         <path d="M7 20V4m10 16V4M7 4l-4 4m4-4l4 4m6 12l-4-4m4 4l4-4" />
                     </svg>
                 </button>
+                <button class="peak-btn" onclick="openNodeEditor()" title="Node Editor Pipeline"
+                    style="background: linear-gradient(135deg, #00bcd4, #7c4dff); border: none; color: #fff;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="20" rx="5"></rect>
+                        <line x1="6" y1="12" x2="18" y2="12"></line>
+                        <line x1="12" y1="6" x2="12" y2="18"></line>
+                    </svg>
+                </button>
                 <button class="peak-btn" onclick="openAutoAnalysisModal()" title="Auto-Analysis Pipeline"
                     style="background: linear-gradient(135deg, #7c4dff, #00e676); border: none; color: #fff;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -673,6 +701,11 @@
                         <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
                     </svg>
                     dx
+                </button>
+                <button onclick="rescaleSignalView()" title="Fit entire signal to view">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                    </svg>
                 </button>
                 <button onclick="prevWindow()" title="Prev">&lt;</button>
                 <button onclick="nextWindow()" title="Next">&gt;</button>
@@ -832,6 +865,7 @@
     <script src="js/analysis/peaks.js"></script>
     <script src="js/analysis/histogram.js"></script>
     <script src="js/analysis/automation.js"></script>
+    <script src="js/analysis/node_editor.js"></script>
 
     <!-- IO -->
     <script src="js/io/export.js"></script>

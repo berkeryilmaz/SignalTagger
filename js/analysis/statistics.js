@@ -241,7 +241,7 @@ function calculateOptimalBins(data) {
     let bins = Math.ceil(range / binWidth);
 
     // Makul sınırlara kısıtla
-    return Math.max(5, Math.min(bins, 1000));
+    return Math.max(5, bins);
 }
 
 /**
