@@ -200,7 +200,7 @@ function updateHistoChartUI(histoData, gaussData) {
  * Histogram, baseSeries (scatter) üzerinden otomatik hesaplanır.
  * Bin sayısı sabit kalır — sadece bin input değiştirildiğinde güncellenir.
  */
-function createDistributionChart(containerId, dataArray, title, xTitle, color, binCount, chartType) {
+function createDistributionChart(containerId, dataArray, title, xTitle, color, binCount, chartType, useLogX = false, useLogY = false) {
     const tc = getThemeColors();
 
     Highcharts.chart(containerId, {
@@ -226,14 +226,16 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
         xAxis: {
             title: { text: xTitle, style: { color: tc.textMuted } },
             lineColor: tc.axisLine,
-            labels: { style: { color: tc.textMuted } }
+            labels: { style: { color: tc.textMuted } },
+            type: useLogX ? 'logarithmic' : 'linear'
         },
         yAxis: {
             title: { text: 'Count', style: { color: color } },
             gridLineColor: tc.grid,
             labels: { style: { color: tc.textMuted } },
             allowDecimals: false,
-            min: 0
+            type: useLogY ? 'logarithmic' : 'linear',
+            ...(useLogY ? {} : { min: 0 })
         },
         series: [{
             name: 'Histogram',
