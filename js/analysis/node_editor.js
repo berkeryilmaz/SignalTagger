@@ -227,7 +227,7 @@ const NODE_TYPES = {
         category: 'Logic', name: 'Threshold Replace',
         inputs: [{ name: 'sig', type: 'any' }, { name: 'threshold', type: 'any' }, { name: 'replacement', type: 'any' }],
         params: [
-            { name: 'operator', type: 'string', default: '<' },
+            { name: 'operator', type: 'string', default: '<', options: ['<', '>', '<=', '>=', '==', '!='] },
             { name: 'threshold', type: 'number', default: 0 },
             { name: 'replacement', type: 'number', default: 0 }
         ],
@@ -458,8 +458,40 @@ const NODE_TYPES = {
 
     // --- ANALYSIS ---
     'ThresholdDetection': {
-        category: 'Analysis', name: 'Threshold Detect', inputs: [{ name: 'sig', type: 'signal' }, { name: 'threshold', type: 'number' }], params: [{ name: 'minWidth', type: 'number', default: 10 }], outputs: [{ name: 'regions', type: 'array' }],
-        exec: (inputs, params) => { let s = inputs.sig; let thresh = inputs.threshold || 0; let mw = parseInt(params.minWidth); if (!s) throw new Error("No signal input"); let regions = []; let inR = false; let start = -1; for (let i = 0; i < s.length; i++) { if (s[i] > thresh) { if (!inR) { inR = true; start = i; } } else { if (inR) { inR = false; if (i - start >= mw) regions.push({ start, end: i - 1 }); } } } if (inR && s.length - start >= mw) regions.push({ start, end: s.length - 1 }); return { regions }; }
+        category: 'Analysis', name: 'Threshold Detect', 
+        inputs: [{ name: 'sig', type: 'signal' }, { name: 'threshold', type: 'number' }], 
+        params: [
+            { name: 'operator', type: 'string', default: '>', options: ['>', '<', '>=', '<='] }, 
+            { name: 'minWidth', type: 'number', default: 10 }
+        ], 
+        outputs: [{ name: 'regions', type: 'array' }],
+        exec: (inputs, params) => { 
+            let s = inputs.sig; 
+            let thresh = inputs.threshold || 0; 
+            let mw = parseInt(params.minWidth); 
+            let op = params.operator || '>';
+            if (!s) throw new Error("No signal input"); 
+            
+            const compareFn = {
+                '<': (v, t) => v < t,
+                '>': (v, t) => v > t,
+                '<=': (v, t) => v <= t,
+                '>=': (v, t) => v >= t
+            }[op] || ((v, t) => v > t);
+
+            let regions = []; 
+            let inR = false; 
+            let start = -1; 
+            for (let i = 0; i < s.length; i++) { 
+                if (compareFn(s[i], thresh)) { 
+                    if (!inR) { inR = true; start = i; } 
+                } else { 
+                    if (inR) { inR = false; if (i - start >= mw) regions.push({ start, end: i - 1 }); } 
+                } 
+            } 
+            if (inR && s.length - start >= mw) regions.push({ start, end: s.length - 1 }); 
+            return { regions }; 
+        }
     },
     'FindLabeledRegions': { category: 'Analysis', name: 'Find Labeled Regions', inputs: [{ name: 'labels', type: 'array' }], params: [{ name: 'classId', type: 'number', default: 2 }], outputs: [{ name: 'regions', type: 'array' }], exec: (inputs, params) => { if (!inputs.labels || !window.findLabeledRegions) throw new Error("Missing dependencies"); return { regions: window.findLabeledRegions(inputs.labels, parseInt(params.classId)) }; } },
     'ExpandPeaks': { category: 'Analysis', name: 'Expand Peaks to Baseline', inputs: [{ name: 'sig', type: 'signal' }, { name: 'regions', type: 'array' }, { name: 'baseline', type: 'number' }], outputs: [{ name: 'expanded', type: 'array' }], exec: (inputs) => { if (!inputs.sig || !inputs.regions || !window.expandPeaksToBaseline) throw new Error("Missing dependencies"); return { expanded: window.expandPeaksToBaseline(inputs.sig, inputs.regions, inputs.baseline || 0) }; } },
@@ -890,9 +922,17 @@ class NodeEditor {
             html += `<div class="ne-node-params">`;
             n.def.params.forEach(p => {
                 html += `<div class="ne-param-row">
-                    <label>${p.name}</label>
-                    <input type="text" data-param="${p.name}" value="${n.params[p.name]}" onchange="window.nodeEditor.updateParam('${id}', '${p.name}', this.value)">
-                </div>`;
+                    <label>${p.name}</label>`;
+                if (p.options) {
+                    html += `<select data-param="${p.name}" onchange="window.nodeEditor.updateParam('${id}', '${p.name}', this.value)">`;
+                    p.options.forEach(opt => {
+                        html += `<option value="${opt}" ${n.params[p.name] === opt ? 'selected' : ''}>${opt}</option>`;
+                    });
+                    html += `</select>`;
+                } else {
+                    html += `<input type="text" data-param="${p.name}" value="${n.params[p.name]}" onchange="window.nodeEditor.updateParam('${id}', '${p.name}', this.value)">`;
+                }
+                html += `</div>`;
             });
             html += `</div>`;
         }
