@@ -81,37 +81,58 @@
  * @param {number}                base   - Baseline değeri
  * @returns {number} FWHM (örnekleme noktası cinsinden)
  */
-function calculateFWHM(data, start, end, maxVal, maxIdx, base) {
-    if (maxIdx === -1) return 0;
+function calculateFWHM(data, start, end, peakVal, peakIdx, base) {
+    if (peakIdx === -1) return 0;
 
-    let halfMax = (maxVal - base) / 2 + base;
+    let halfMax = (peakVal - base) / 2 + base;
+    let isNegative = peakVal < base;
 
     // Sol geçiş noktasını bul
-    let leftIdx = maxIdx;
-    while (leftIdx > start && data[leftIdx] > halfMax) {
-        leftIdx--;
+    let leftIdx = peakIdx;
+    if (isNegative) {
+        while (leftIdx > start && data[leftIdx] < halfMax) leftIdx--;
+    } else {
+        while (leftIdx > start && data[leftIdx] > halfMax) leftIdx--;
     }
 
     // Sol lineer interpolasyon
     let fwhmStart = leftIdx;
-    if (data[leftIdx] <= halfMax && data[leftIdx + 1] > halfMax) {
-        let v1 = data[leftIdx];
-        let v2 = data[leftIdx + 1];
-        fwhmStart = leftIdx + (halfMax - v1) / (v2 - v1);
+    if (isNegative) {
+        if (data[leftIdx] >= halfMax && data[leftIdx + 1] < halfMax) {
+            let v1 = data[leftIdx];
+            let v2 = data[leftIdx + 1];
+            fwhmStart = leftIdx + (halfMax - v1) / (v2 - v1);
+        }
+    } else {
+        if (data[leftIdx] <= halfMax && data[leftIdx + 1] > halfMax) {
+            let v1 = data[leftIdx];
+            let v2 = data[leftIdx + 1];
+            fwhmStart = leftIdx + (halfMax - v1) / (v2 - v1);
+        }
     }
 
     // Sağ geçiş noktasını bul
-    let rightIdx = maxIdx;
-    while (rightIdx < end && data[rightIdx] > halfMax) {
-        rightIdx++;
+    let rightIdx = peakIdx;
+    if (isNegative) {
+        while (rightIdx < end && data[rightIdx] < halfMax) rightIdx++;
+    } else {
+        while (rightIdx < end && data[rightIdx] > halfMax) rightIdx++;
     }
 
     // Sağ lineer interpolasyon
     let fwhmEnd = rightIdx;
-    if (data[rightIdx] <= halfMax && data[rightIdx - 1] > halfMax) {
-        let v1 = data[rightIdx - 1];
-        let v2 = data[rightIdx];
-        fwhmEnd = (rightIdx - 1) + (halfMax - v1) / (v2 - v1);
+    if (isNegative) {
+        if (data[rightIdx] >= halfMax && data[rightIdx - 1] < halfMax) {
+            let v1 = data[rightIdx - 1];
+            let v2 = data[rightIdx];
+            fwhmEnd = (rightIdx - 1) + (halfMax - v1) / (v2 - v1);
+        }
+    } else {
+        if (data[rightIdx] <= halfMax && data[rightIdx - 1] > halfMax) {
+            let v1 = data[rightIdx - 1];
+            let v2 = data[rightIdx];
+            fwhmEnd = (rightIdx - 1) + (halfMax - v1) / (v2 - v1);
+        }
     }
 
     let fwhm = fwhmEnd - fwhmStart;

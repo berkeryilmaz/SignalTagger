@@ -458,20 +458,20 @@ const NODE_TYPES = {
 
     // --- ANALYSIS ---
     'ThresholdDetection': {
-        category: 'Analysis', name: 'Threshold Detect', 
-        inputs: [{ name: 'sig', type: 'signal' }, { name: 'threshold', type: 'number' }], 
+        category: 'Analysis', name: 'Threshold Detect',
+        inputs: [{ name: 'sig', type: 'signal' }, { name: 'threshold', type: 'number' }],
         params: [
-            { name: 'operator', type: 'string', default: '>', options: ['>', '<', '>=', '<='] }, 
+            { name: 'operator', type: 'string', default: '>', options: ['>', '<', '>=', '<='] },
             { name: 'minWidth', type: 'number', default: 10 }
-        ], 
+        ],
         outputs: [{ name: 'regions', type: 'array' }],
-        exec: (inputs, params) => { 
-            let s = inputs.sig; 
-            let thresh = inputs.threshold || 0; 
-            let mw = parseInt(params.minWidth); 
+        exec: (inputs, params) => {
+            let s = inputs.sig;
+            let thresh = inputs.threshold || 0;
+            let mw = parseInt(params.minWidth);
             let op = params.operator || '>';
-            if (!s) throw new Error("No signal input"); 
-            
+            if (!s) throw new Error("No signal input");
+
             const compareFn = {
                 '<': (v, t) => v < t,
                 '>': (v, t) => v > t,
@@ -479,27 +479,108 @@ const NODE_TYPES = {
                 '>=': (v, t) => v >= t
             }[op] || ((v, t) => v > t);
 
-            let regions = []; 
-            let inR = false; 
-            let start = -1; 
-            for (let i = 0; i < s.length; i++) { 
-                if (compareFn(s[i], thresh)) { 
-                    if (!inR) { inR = true; start = i; } 
-                } else { 
-                    if (inR) { inR = false; if (i - start >= mw) regions.push({ start, end: i - 1 }); } 
-                } 
-            } 
-            if (inR && s.length - start >= mw) regions.push({ start, end: s.length - 1 }); 
-            return { regions }; 
+            let regions = [];
+            let inR = false;
+            let start = -1;
+            for (let i = 0; i < s.length; i++) {
+                if (compareFn(s[i], thresh)) {
+                    if (!inR) { inR = true; start = i; }
+                } else {
+                    if (inR) { inR = false; if (i - start >= mw) regions.push({ start, end: i - 1 }); }
+                }
+            }
+            if (inR && s.length - start >= mw) regions.push({ start, end: s.length - 1 });
+            return { regions };
         }
     },
     'FindLabeledRegions': { category: 'Analysis', name: 'Find Labeled Regions', inputs: [{ name: 'labels', type: 'array' }], params: [{ name: 'classId', type: 'number', default: 2 }], outputs: [{ name: 'regions', type: 'array' }], exec: (inputs, params) => { if (!inputs.labels || !window.findLabeledRegions) throw new Error("Missing dependencies"); return { regions: window.findLabeledRegions(inputs.labels, parseInt(params.classId)) }; } },
     'ExpandPeaks': { category: 'Analysis', name: 'Expand Peaks to Baseline', inputs: [{ name: 'sig', type: 'signal' }, { name: 'regions', type: 'array' }, { name: 'baseline', type: 'number' }], outputs: [{ name: 'expanded', type: 'array' }], exec: (inputs) => { if (!inputs.sig || !inputs.regions || !window.expandPeaksToBaseline) throw new Error("Missing dependencies"); return { expanded: window.expandPeaksToBaseline(inputs.sig, inputs.regions, inputs.baseline || 0) }; } },
+    'FilterRegions': {
+        category: 'Analysis', name: 'Filter Regions',
+        inputs: [{ name: 'regions', type: 'array' }, { name: 'threshold', type: 'number' }],
+        params: [
+            { name: 'property', type: 'string', default: 'max', options: ['max', 'min', 'peakVal', 'charge', 'area', 'energy', 'width', 'fwhm'] },
+            { name: 'operator', type: 'string', default: '<', options: ['<', '>', '<=', '>=', '==', '!='] },
+            { name: 'threshold', type: 'number', default: 0 },
+            { name: 'multiplier', type: 'string', default: '1' }
+        ],
+        outputs: [{ name: 'filtered', type: 'array' }],
+        exec: (inputs, params) => {
+            let regs = inputs.regions;
+            if (!regs || !Array.isArray(regs)) return { filtered: [] };
+            let prop = params.property || 'max';
+            let op = params.operator || '<';
+            let thresh = inputs.threshold !== undefined ? inputs.threshold : (parseFloat(params.threshold) || 0);
+            let mult = parseFloat(params.multiplier);
+            if (isNaN(mult)) mult = 1;
+            thresh *= mult;
+
+            const compareFn = {
+                '<': (v, t) => v < t,
+                '>': (v, t) => v > t,
+                '<=': (v, t) => v <= t,
+                '>=': (v, t) => v >= t,
+                '==': (v, t) => Math.abs(v - t) < 1e-10,
+                '!=': (v, t) => Math.abs(v - t) >= 1e-10
+            }[op] || ((v, t) => v < t);
+
+            let filtered = regs.filter(r => {
+                let val = r[prop];
+                if (val === undefined) return false;
+                return compareFn(val, thresh);
+            });
+            return { filtered };
+        }
+    },
+    'SetRegionLabel': {
+        category: 'Analysis', name: 'Set Region Label',
+        inputs: [{ name: 'regions', type: 'array' }, { name: 'threshold', type: 'number' }],
+        params: [
+            { name: 'property', type: 'string', default: 'charge', options: ['max', 'min', 'peakVal', 'charge', 'area', 'energy', 'width', 'fwhm'] },
+            { name: 'operator', type: 'string', default: '>', options: ['<', '>', '<=', '>=', '==', '!='] },
+            { name: 'threshold', type: 'number', default: 0 },
+            { name: 'multiplier', type: 'string', default: '1' },
+            { name: 'trueLabel', type: 'number', default: 3 },
+            { name: 'falseLabel', type: 'number', default: 2 }
+        ],
+        outputs: [{ name: 'out_regions', type: 'array' }],
+        exec: (inputs, params) => {
+            let regs = inputs.regions;
+            if (!regs || !Array.isArray(regs)) return { out_regions: [] };
+            let prop = params.property || 'charge';
+            let op = params.operator || '>';
+            let thresh = inputs.threshold !== undefined ? inputs.threshold : (parseFloat(params.threshold) || 0);
+            let mult = parseFloat(params.multiplier);
+            if (isNaN(mult)) mult = 1;
+            thresh *= mult;
+            let tLab = parseInt(params.trueLabel) || 3;
+            let fLab = parseInt(params.falseLabel) || 2;
+
+            const compareFn = {
+                '<': (v, t) => v < t,
+                '>': (v, t) => v > t,
+                '<=': (v, t) => v <= t,
+                '>=': (v, t) => v >= t,
+                '==': (v, t) => Math.abs(v - t) < 1e-10,
+                '!=': (v, t) => Math.abs(v - t) >= 1e-10
+            }[op] || ((v, t) => v > t);
+
+            let out_regions = regs.map(r => {
+                let val = r[prop];
+                let newLabel = fLab;
+                if (val !== undefined && compareFn(val, thresh)) {
+                    newLabel = tLab;
+                }
+                return { ...r, label: newLabel };
+            });
+            return { out_regions };
+        }
+    },
 
     // --- PHYSICS ---
     'CalculatePhysics': {
         category: 'Physics', name: 'Physics Metrics', inputs: [{ name: 'sig', type: 'signal' }, { name: 'regions', type: 'array' }, { name: 'base', type: 'number' }], outputs: [{ name: 'results', type: 'array' }],
-        exec: (inputs) => { let s = inputs.sig; let regs = inputs.regions; let base = inputs.base || 0; if (!s || !regs) throw new Error("Missing inputs"); const physParams = window.getPhysicsParams ? window.getPhysicsParams() : { V_offset: 0, R: 50, dt: 1e-9 }; let results = []; for (let r of regs) { let area = 0; let sumSq = 0; let max = -Infinity; let maxIdx = -1; for (let j = r.start; j <= r.end; j++) { let val = s[j]; if (val > max) { max = val; maxIdx = j; } let diff = val - base; area += diff; sumSq += (diff * diff); } let fwhm = window.calculateFWHM ? window.calculateFWHM(s, r.start, r.end, max, maxIdx, base) : 0; let phys = window.calculatePhysicsMetrics ? window.calculatePhysicsMetrics({ area, sumVSq: sumSq }, physParams) : { charge: 0, energy: 0, energyEV: 0 }; results.push({ start: r.start, end: r.end, width: r.end - r.start + 1, fwhm, max, area, sumSq, charge: phys.charge, energy: phys.energy, energyEV: phys.energyEV, base }); } return { results }; }
+        exec: (inputs) => { let s = inputs.sig; let regs = inputs.regions; let base = inputs.base || 0; if (!s || !regs) throw new Error("Missing inputs"); const physParams = window.getPhysicsParams ? window.getPhysicsParams() : { V_offset: 0, R: 50, dt: 1e-9 }; let results = []; for (let r of regs) { let area = 0; let sumSq = 0; let max = -Infinity; let min = Infinity; let maxIdx = -1; let minIdx = -1; for (let j = r.start; j <= r.end; j++) { let val = s[j]; if (val > max) { max = val; maxIdx = j; } if (val < min) { min = val; minIdx = j; } let diff = val - base; area += diff; sumSq += (diff * diff); } let isNeg = Math.abs(min - base) > Math.abs(max - base); let peakVal = isNeg ? min : max; let peakIdx = isNeg ? minIdx : maxIdx; let fwhm = window.calculateFWHM ? window.calculateFWHM(s, r.start, r.end, peakVal, peakIdx, base) : 0; let phys = window.calculatePhysicsMetrics ? window.calculatePhysicsMetrics({ area, sumVSq: sumSq }, physParams) : { charge: 0, energy: 0, energyEV: 0 }; results.push({ ...r, width: r.end - r.start + 1, fwhm, max, min, peakVal, area, sumSq, charge: phys.charge, energy: phys.energy, energyEV: phys.energyEV, base }); } return { results }; }
     },
     'ChargeCalculation': { category: 'Physics', name: 'Calculate Charge', inputs: [{ name: 'area', type: 'number' }], params: [{ name: 'R', type: 'number', default: 50 }, { name: 'dt', type: 'number', default: 1e-9 }], outputs: [{ name: 'charge', type: 'number' }], exec: (inputs, params) => { if (!window.calculateCharge) throw new Error("Missing calculateCharge function"); return { charge: window.calculateCharge(inputs.area || 0, parseFloat(params.R), parseFloat(params.dt)) }; } },
     'EnergyCalculation': { category: 'Physics', name: 'Calculate Energy', inputs: [{ name: 'sumVSq', type: 'number' }], params: [{ name: 'R', type: 'number', default: 50 }, { name: 'dt', type: 'number', default: 1e-9 }], outputs: [{ name: 'energy', type: 'number' }], exec: (inputs, params) => { if (!window.calculateEnergy) throw new Error("Missing calculateEnergy function"); return { energy: window.calculateEnergy(inputs.sumVSq || 0, parseFloat(params.R), parseFloat(params.dt)) }; } },
@@ -585,11 +666,34 @@ const NODE_TYPES = {
     },
     'ApplyLabels': {
         category: 'Output', name: 'Apply to Global Labels', inputs: [{ name: 'regions', type: 'array' }], params: [{ name: 'classId', type: 'number', default: 2 }], outputs: [],
-        exec: (inputs, params) => { let regs = inputs.regions; let cls = parseInt(params.classId); if (!regs || !state.signal) return {}; let labels = new Int8Array(state.signal.length); for (let r of regs) { for (let i = r.start; i <= r.end; i++) labels[i] = cls; } if (window.updateState) window.updateState({ labels }); return {}; }
+        exec: (inputs, params) => {
+            let regs = inputs.regions;
+            let cls = parseInt(params.classId);
+            if (!regs || !state.signal) return {};
+            let labels = state.labels;
+            if (!labels || labels.length !== state.signal.length) {
+                labels = new Int8Array(state.signal.length);
+            } else {
+                labels = new Int8Array(labels); // Clone it to accumulate
+            }
+            for (let r of regs) {
+                let rCls = r.label !== undefined ? r.label : cls;
+                for (let i = r.start; i <= r.end; i++) labels[i] = rCls;
+            }
+            if (window.updateState) window.updateState({ labels });
+            return {};
+        }
     },
     'DisplayResults': {
         category: 'Output', name: 'Table Analysis Data', inputs: [{ name: 'results', type: 'array' }], outputs: [],
-        exec: (inputs) => { if (!inputs.results) return {}; window.analysisData = inputs.results.map((r, i) => ({ id: i + 1, label: 2, ...r })); return {}; }
+        exec: (inputs) => {
+            if (!inputs.results) return {};
+            if (!window.analysisData) window.analysisData = [];
+            let currentOffset = window.analysisData.length;
+            let newData = inputs.results.map((r, i) => ({ id: currentOffset + i + 1, label: r.label !== undefined ? r.label : 2, ...r }));
+            window.analysisData = window.analysisData.concat(newData);
+            return {};
+        }
     },
     'SaveSignal': {
         category: 'Output', name: 'Save Signal',
@@ -878,8 +982,8 @@ class NodeEditor {
     }
 
     // --- NODE MANAGEMENT ---
-    createNode(type, x, y) {
-        let id = 'n' + (this.idCounter++);
+    createNode(type, x, y, forceId = null) {
+        let id = forceId ? forceId : 'n' + (this.idCounter++);
         let n = new Node(id, type, x, y);
         this.nodes[id] = n;
 
@@ -1289,6 +1393,14 @@ class NodeEditor {
             n.el.classList.remove('executing', 'error', 'success');
         });
 
+        // Prepare accumulation targets if these output nodes are present
+        if (order.some(id => this.nodes[id].type === 'ApplyLabels') && window.state && window.state.signal) {
+            window.updateState({ labels: new Int8Array(window.state.signal.length) });
+        }
+        if (order.some(id => this.nodes[id].type === 'DisplayResults')) {
+            window.analysisData = [];
+        }
+
         let contextOutputs = {}; // node_id: { port: val }
 
         for (let id of order) {
@@ -1382,18 +1494,9 @@ class NodeEditor {
                     console.warn(`Unknown node type: ${n.type}, skipping`);
                     return;
                 }
-                this.createNode(n.type, n.x, n.y);
-                // Temporarily manually override IDs since createNode increments counter
-                let newId = n.id;
-                let lastId = 'n' + (this.idCounter - 1);
-
-                // Correct maps and DOM
-                let inst = this.nodes[lastId];
+                this.createNode(n.type, n.x, n.y, n.id);
+                let inst = this.nodes[n.id];
                 if (!inst) return;
-                delete this.nodes[lastId];
-                inst.id = newId;
-                this.nodes[newId] = inst;
-                inst.el.dataset.id = newId;
 
                 // Merge saved params, keeping defaults for any missing keys
                 if (n.params) {
@@ -1402,18 +1505,14 @@ class NodeEditor {
                     });
                 }
 
-                // Also fix onchange handlers to use the corrected node ID
-                inst.el.querySelectorAll('.ne-node-params input[data-param]').forEach(inp => {
+                // Also fix onchange handlers
+                inst.el.querySelectorAll('.ne-node-params input[data-param], .ne-node-params select[data-param]').forEach(inp => {
                     const pName = inp.dataset.param;
                     inp.value = inst.params[pName] !== undefined ? inst.params[pName] : '';
-                    inp.setAttribute('onchange', `window.nodeEditor.updateParam('${newId}', '${pName}', this.value)`);
+                    inp.setAttribute('onchange', `window.nodeEditor.updateParam('${n.id}', '${pName}', this.value)`);
                 });
 
-                // Fix delete button onclick to use corrected node ID
-                let delBtn = inst.el.querySelector('.ne-node-delete');
-                if (delBtn) delBtn.setAttribute('onclick', `window.nodeEditor.deleteNode('${newId}')`);
-
-                let num = parseInt(newId.replace('n', ''));
+                let num = parseInt(n.id.replace('n', ''));
                 if (num > maxId) maxId = num;
             });
             this.idCounter = maxId + 1;
@@ -1427,10 +1526,10 @@ class NodeEditor {
 
             // Connections use getBoundingClientRect which needs layout to complete.
             // Defer path recalculation until browser has rendered the nodes.
-            requestAnimationFrame(() => {
+            setTimeout(() => {
                 this.connections.forEach(c => this.updateConnectionPath(c));
                 this.updateMinimap();
-            });
+            }, 500);
 
         } catch (e) {
             console.error(e);
