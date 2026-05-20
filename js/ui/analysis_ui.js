@@ -15,10 +15,60 @@
 
 // Global variables for sorting are no longer needed with DataTables
 
+function updateTableClassFilterDropdown() {
+    const select = document.getElementById('tableClassFilter');
+    if (!select) return;
+    const currentVal = select.value || 'all';
+    
+    // Preserve selection
+    select.innerHTML = '<option value="all">All Classes</option>';
+    
+    if (state.labelTypes) {
+        Object.keys(state.labelTypes).forEach(key => {
+            const id = parseInt(key);
+            if (id === 0) return; // Skip "None"
+            const type = state.labelTypes[id];
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = `${id}. ${type.name}`;
+            opt.style.color = type.color;
+            opt.style.fontWeight = 'bold';
+            if (currentVal === String(id)) {
+                opt.selected = true;
+            }
+            select.appendChild(opt);
+        });
+    }
+}
+
 function renderAnalysisTable(forceRebuild = false) {
     if (!window.analysisData) window.analysisData = [];
 
-    // Calculate Best Units for Physics Columns
+    // Ensure the filter dropdown is synchronized with active classes
+    updateTableClassFilterDropdown();
+
+    // Get active filter value
+    const select = document.getElementById('tableClassFilter');
+    const filterVal = select ? select.value : 'all';
+
+    // Filter dynamic peak data
+    let filteredData = window.analysisData;
+    if (filterVal !== 'all') {
+        const filterId = parseInt(filterVal);
+        filteredData = window.analysisData.filter(row => row.label === filterId);
+    }
+
+    // Update the peak count label
+    const countEl = document.getElementById("peak-count");
+    if (countEl) {
+        if (filterVal !== 'all') {
+            countEl.textContent = `Showing ${filteredData.length} of ${window.analysisData.length} regions`;
+        } else {
+            countEl.textContent = `${window.analysisData.length} regions`;
+        }
+    }
+
+    // Calculate Best Units for Physics Columns (from entire window.analysisData to keep units stable)
     // 1. Extract arrays
     const charges = window.analysisData.map(d => d.charge);
     const energies = window.analysisData.map(d => d.energy);
@@ -29,8 +79,8 @@ function renderAnalysisTable(forceRebuild = false) {
     const eUnit = window.calculateColumnUnit ? window.calculateColumnUnit(energies) : { scale: 1e12, prefix: 'p' };
     const evUnit = window.calculateColumnUnit ? window.calculateColumnUnit(energyEVs) : { scale: 1, prefix: '' };
 
-    // Prepare data for DataTables
-    const tableData = window.analysisData.map(row => {
+    // Prepare data for DataTables from filteredData
+    const tableData = filteredData.map(row => {
         let className = row.label;
         if (state.labelTypes && state.labelTypes[row.label]) {
             className = `${row.label} (${state.labelTypes[row.label].name})`;
@@ -143,6 +193,9 @@ function showPeakDistributions(e) {
 
     if (window.openModal) window.openModal('peakDistModal');
 
+    // Populate pills dynamically!
+    if (window.renderDistClassPills) window.renderDistClassPills();
+
     setTimeout(() => {
         const types = [
             { key: 'width', inputId: 'binsWidth', dataFn: d => d.width },
@@ -177,4 +230,5 @@ function showPeakDistributions(e) {
 // Global exposure
 window.renderAnalysisTable = renderAnalysisTable;
 window.showPeakDistributions = showPeakDistributions;
+window.updateTableClassFilterDropdown = updateTableClassFilterDropdown;
 

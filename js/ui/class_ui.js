@@ -37,6 +37,11 @@ function renderClassButtons() {
         setLabelType(parseInt(this.value));
         updateSelectColor(this);
     };
+
+    // Auto-synchronize Peak Analysis Table filters and visual styles
+    if (window.renderAnalysisTable) {
+        window.renderAnalysisTable(false);
+    }
 }
 
 function updateSelectColor(select) {

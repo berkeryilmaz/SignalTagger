@@ -236,6 +236,20 @@
                 Peak Distributions
             </h3>
 
+            <!-- Dynamic Class Selector for Distributions -->
+            <div class="dist-filter-section" style="margin-bottom: 20px; padding: 15px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                    <span class="input-label" style="font-size: 0.75rem; letter-spacing: 0.5px; margin: 0;">Filter Distributions by Class (Multi-select)</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="modal-btn btn-xs-outlined" style="margin: 0; padding: 4px 10px; font-size: 11px; width: auto;" onclick="toggleAllDistClasses(true)">Select All</button>
+                        <button class="modal-btn btn-xs-outlined" style="margin: 0; padding: 4px 10px; font-size: 11px; width: auto;" onclick="toggleAllDistClasses(false)">Deselect All</button>
+                    </div>
+                </div>
+                <div id="distClassPills" class="class-pills-container">
+                    <!-- Dynamically populated checkboxes/pills -->
+                </div>
+            </div>
+
             <div class="dist-container">
                 <!-- Width Chart -->
                 <div class="dist-chart-card">
@@ -793,6 +807,10 @@
             </h4>
             <div class="flex-center">
                 <span id="peak-count" class="peak-count-label">0 peaks found</span>
+                <div class="divider divider-sm"></div>
+                <select id="tableClassFilter" class="select-modern" onclick="event.stopPropagation()" onchange="renderAnalysisTable(false)">
+                    <option value="all">All Classes</option>
+                </select>
                 <button class="modal-btn btn-xs-outlined btn-xs-histo" onclick="showPeakDistributions(event)">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 20V10M12 20V4M6 20v-6" />
