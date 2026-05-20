@@ -85,12 +85,16 @@ function runThresholdDetection() {
     let minWidth = parseInt(document.getElementById("peakMinWidth").value) || 10;
 
     const data = state.isSmoothEnabled ? state.smoothedSignal : state.signal;
+    const baseline = state.baselineValue || 0;
+    const isNegative = threshold < baseline;
+    const checkFn = isNegative ? (val) => val < threshold : (val) => val > threshold;
+
     let count = 0;
     let inRegion = false;
     let start = -1;
 
     for (let i = 0; i < data.length; i++) {
-        if (data[i] > threshold) {
+        if (checkFn(data[i])) {
             if (!inRegion) { inRegion = true; start = i; }
         } else {
             if (inRegion) {
@@ -154,18 +158,45 @@ function expandPeaksToBaseline() {
 
     // Her segmenti sola ve sağa genişlet
     peakSegments.forEach(seg => {
+        // Peak yönünü belirle: En yüksek mutlak sapma yönü
+        let maxDev = 0;
+        let peakDir = 1; // 1: Pozitif, -1: Negatif
+        for (let i = seg.start; i <= seg.end; i++) {
+            let dev = data[i] - baseline;
+            if (Math.abs(dev) > Math.abs(maxDev)) {
+                maxDev = dev;
+                peakDir = dev >= 0 ? 1 : -1;
+            }
+        }
+
         let left = seg.start - 1;
-        while (left >= 0 && data[left] > baseline && labels[left] !== 2) {
-            labels[left] = 2;
-            modifiedCount++;
-            left--;
+        if (peakDir === 1) {
+            while (left >= 0 && data[left] > baseline && labels[left] !== 2) {
+                labels[left] = 2;
+                modifiedCount++;
+                left--;
+            }
+        } else {
+            while (left >= 0 && data[left] < baseline && labels[left] !== 2) {
+                labels[left] = 2;
+                modifiedCount++;
+                left--;
+            }
         }
 
         let right = seg.end + 1;
-        while (right < data.length && data[right] > baseline && labels[right] !== 2) {
-            labels[right] = 2;
-            modifiedCount++;
-            right++;
+        if (peakDir === 1) {
+            while (right < data.length && data[right] > baseline && labels[right] !== 2) {
+                labels[right] = 2;
+                modifiedCount++;
+                right++;
+            }
+        } else {
+            while (right < data.length && data[right] < baseline && labels[right] !== 2) {
+                labels[right] = 2;
+                modifiedCount++;
+                right++;
+            }
         }
     });
 
