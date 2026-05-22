@@ -1423,3 +1423,106 @@ table.dataTable tbody tr.selected {
     --chart-grid: #e5e7eb;
     --chart-line: #0284c7;
 }
+
+/* Modern Select & Class Pill Styles for Filtering */
+.select-modern {
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 3px 24px 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    height: 26px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px;
+}
+
+.select-modern:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(0, 230, 118, 0.15);
+}
+
+.class-pills-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.class-pill {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--text-muted);
+}
+
+.class-pill:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--text-muted);
+}
+
+.class-pill.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+    border-color: currentColor;
+    box-shadow: 0 0 8px currentColor;
+}
+
+[data-theme="light"] .class-pill {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="light"] .class-pill:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .class-pill.active {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.class-pill input[type="checkbox"] {
+    display: none;
+}
+
+.class-pill-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    transition: transform 0.2s;
+}
+
+.class-pill.active .class-pill-dot {
+    transform: scale(1.3);
+}
+
+.chart-empty-msg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 350px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.01);
+}

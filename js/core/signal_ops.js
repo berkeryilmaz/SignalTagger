@@ -41,32 +41,35 @@ function updatePrecision() {
 
 
 function alignBaselineToZero() {
-    if (!state.signal) return;
+    if (!state.signal) return Promise.resolve();
     let offset = state.baselineValue;
-    if (offset === 0) return;
+    if (offset === 0) return Promise.resolve();
 
     if (window.showLoading) window.showLoading("Adjusting Baseline...");
-    setTimeout(() => {
-        const signal = state.signal;
-        for (let i = 0; i < signal.length; i++) {
-            signal[i] = signal[i] - offset;
-        }
-        state.globalMin = state.globalMin - offset;
-        state.globalMax = state.globalMax - offset;
-        state.baselineValue = 0;
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            const signal = state.signal;
+            for (let i = 0; i < signal.length; i++) {
+                signal[i] = signal[i] - offset;
+            }
+            state.globalMin = state.globalMin - offset;
+            state.globalMax = state.globalMax - offset;
+            state.baselineValue = 0;
 
-        if (elements.baselineInput) elements.baselineInput.value = 0;
+            if (elements.baselineInput) elements.baselineInput.value = 0;
 
-        if (!state.isBaselineEnabled) {
-            state.isBaselineEnabled = true;
-            if (elements.baselineToggle) elements.baselineToggle.checked = true;
-            if (elements.baselineInput) elements.baselineInput.disabled = false;
-        }
+            if (!state.isBaselineEnabled) {
+                state.isBaselineEnabled = true;
+                if (elements.baselineToggle) elements.baselineToggle.checked = true;
+                if (elements.baselineInput) elements.baselineInput.disabled = false;
+            }
 
-        if (window.recalcFilters) window.recalcFilters();
-        if (window.draw) window.draw();
-        if (window.hideLoading) window.hideLoading();
-    }, 50);
+            if (window.recalcFilters) window.recalcFilters();
+            if (window.draw) window.draw();
+            if (window.hideLoading) window.hideLoading();
+            resolve();
+        }, 50);
+    });
 }
 
 /**

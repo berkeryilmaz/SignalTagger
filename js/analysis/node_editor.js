@@ -377,6 +377,32 @@ const NODE_TYPES = {
     },
     'SliceSignal': { category: 'Signal Ops', name: 'Slice Signal', inputs: [{ name: 'sig', type: 'signal' }, { name: 'start', type: 'number' }, { name: 'end', type: 'number' }], outputs: [{ name: 'out', type: 'signal' }], exec: (inputs) => { let s = inputs.sig; if (!s) throw new Error("No signal"); let start = Math.max(0, Math.floor(inputs.start || 0)); let end = typeof inputs.end === 'number' ? Math.floor(inputs.end) : s.length; end = Math.min(s.length, Math.max(start, end)); return { out: s.slice(start, end) }; } },
     'Derivative': { category: 'Signal Ops', name: 'Derivative (dx)', inputs: [{ name: 'sig', type: 'signal' }], outputs: [{ name: 'out', type: 'signal' }], exec: (inputs) => { let s = inputs.sig; if (!s) throw new Error("No signal"); let out = new Float32Array(s.length); out[0] = s[1] - s[0]; for (let i = 1; i < s.length - 1; i++) out[i] = (s[i + 1] - s[i - 1]) / 2; out[s.length - 1] = s[s.length - 1] - s[s.length - 2]; return { out }; } },
+    'InvertSignal': { category: 'Signal Ops', name: 'Invert Signal', inputs: [{ name: 'sig', type: 'signal' }], outputs: [{ name: 'out', type: 'signal' }], exec: (inputs) => { let s = inputs.sig; if (!s) throw new Error("No signal input"); let out = new Float32Array(s.length); for (let i = 0; i < s.length; i++) out[i] = -s[i]; return { out }; } },
+    'MovingAverage': {
+        category: 'Signal Ops', name: 'Moving Average Filter',
+        inputs: [{ name: 'sig', type: 'signal' }],
+        params: [{ name: 'window', type: 'number', default: 5 }],
+        outputs: [{ name: 'out', type: 'signal' }],
+        exec: (inputs, params) => {
+            let s = inputs.sig; if (!s) throw new Error("No signal input");
+            let w = parseInt(params.window) || 5;
+            if (w < 1) w = 1;
+            let out = new Float32Array(s.length);
+            let half = Math.floor(w / 2);
+            for (let i = 0; i < s.length; i++) {
+                let sum = 0, count = 0;
+                for (let j = -half; j <= half; j++) {
+                    let idx = i + j;
+                    if (idx >= 0 && idx < s.length) {
+                        sum += s[idx];
+                        count++;
+                    }
+                }
+                out[i] = sum / count;
+            }
+            return { out };
+        }
+    },
 
     // --- STATISTICS ---
     'MeanAndStdDev': {
@@ -494,7 +520,59 @@ const NODE_TYPES = {
         }
     },
     'FindLabeledRegions': { category: 'Analysis', name: 'Find Labeled Regions', inputs: [{ name: 'labels', type: 'array' }], params: [{ name: 'classId', type: 'number', default: 2 }], outputs: [{ name: 'regions', type: 'array' }], exec: (inputs, params) => { if (!inputs.labels || !window.findLabeledRegions) throw new Error("Missing dependencies"); return { regions: window.findLabeledRegions(inputs.labels, parseInt(params.classId)) }; } },
-    'ExpandPeaks': { category: 'Analysis', name: 'Expand Peaks to Baseline', inputs: [{ name: 'sig', type: 'signal' }, { name: 'regions', type: 'array' }, { name: 'baseline', type: 'number' }], outputs: [{ name: 'expanded', type: 'array' }], exec: (inputs) => { if (!inputs.sig || !inputs.regions || !window.expandPeaksToBaseline) throw new Error("Missing dependencies"); return { expanded: window.expandPeaksToBaseline(inputs.sig, inputs.regions, inputs.baseline || 0) }; } },
+    'ExpandPeaks': { 
+        category: 'Analysis', name: 'Expand Peaks to Baseline', 
+        inputs: [{ name: 'sig', type: 'signal' }, { name: 'regions', type: 'array' }, { name: 'baseline', type: 'number' }], 
+        outputs: [{ name: 'expanded', type: 'array' }], 
+        exec: (inputs) => { 
+            let data = inputs.sig;
+            let regs = inputs.regions;
+            let baseline = inputs.baseline !== undefined ? inputs.baseline : 0;
+            if (!data || !regs) return { expanded: [] };
+
+            // Deep clone regions to avoid modifying original array objects
+            let expanded = regs.map(r => ({ ...r }));
+
+            expanded.forEach(seg => {
+                // Peak yönünü belirle: En yüksek mutlak sapma yönü
+                let maxDev = 0;
+                let peakDir = 1; // 1: Pozitif, -1: Negatif
+                for (let i = seg.start; i <= seg.end; i++) {
+                    let dev = data[i] - baseline;
+                    if (Math.abs(dev) > Math.abs(maxDev)) {
+                        maxDev = dev;
+                        peakDir = dev >= 0 ? 1 : -1;
+                    }
+                }
+
+                let left = seg.start - 1;
+                if (peakDir === 1) {
+                    while (left >= 0 && data[left] > baseline) {
+                        left--;
+                    }
+                } else {
+                    while (left >= 0 && data[left] < baseline) {
+                        left--;
+                    }
+                }
+                seg.start = left + 1;
+
+                let right = seg.end + 1;
+                if (peakDir === 1) {
+                    while (right < data.length && data[right] > baseline) {
+                        right++;
+                    }
+                } else {
+                    while (right < data.length && data[right] < baseline) {
+                        right++;
+                    }
+                }
+                seg.end = right - 1;
+            });
+
+            return { expanded };
+        } 
+    },
     'FilterRegions': {
         category: 'Analysis', name: 'Filter Regions',
         inputs: [{ name: 'regions', type: 'array' }, { name: 'threshold', type: 'number' }],

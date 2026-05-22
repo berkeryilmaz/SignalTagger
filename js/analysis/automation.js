@@ -303,18 +303,14 @@ function runHistogramAndSetBaseline() {
         }
 
         updateState({ baselineValue: fittedMean, currentGaussianMean: fittedMean });
-        alignBaselineToZero()
-        if (elements.baselineInput) {
-            let prec = (state.dataPrecision !== undefined) ? state.dataPrecision + 2 : 5;
-            elements.baselineInput.value = fittedMean.toFixed(prec);
-        }
+        alignBaselineToZero().then(() => {
+            // Gaussian sigma'yı state'e kaydet (pipeline'da kullanılacak)
+            state._autoSigma = fittedSigma;
 
-        // Gaussian sigma'yı state'e kaydet (pipeline'da kullanılacak)
-        state._autoSigma = fittedSigma;
+            if (window.draw) window.draw();
 
-        if (window.draw) window.draw();
-
-        resolve(fittedSigma);
+            resolve(fittedSigma);
+        });
     });
 }
 

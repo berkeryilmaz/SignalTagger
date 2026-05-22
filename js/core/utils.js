@@ -24,6 +24,7 @@ function getThemeColors() {
         axisLine: isLight ? '#d1d5db' : '#555',
         tooltipBg: isLight ? '#ffffff' : '#000000',
         tooltipText: isLight ? '#000000' : '#ffffff',
+        accentColor: isLight ? '#0284c7' : '#00bcd4',
         derivColor: isLight ? '#c2410c' : '#d97706',
         smoothColor: isLight ? '#059669' : '#00e676',
         histoColor: isLight ? '#7c3aed' : '#7c4dff'

@@ -202,6 +202,89 @@ function updateHistoChartUI(histoData, gaussData) {
  */
 function createDistributionChart(containerId, dataArray, title, xTitle, color, binCount, chartType, useLogX = false, useLogY = false) {
     const tc = getThemeColors();
+    binCount = Math.min(1000, Math.max(5, binCount));
+
+    if (!dataArray || dataArray.length === 0) {
+        if (window.showEmptyDistChart) {
+            window.showEmptyDistChart(containerId, title);
+        }
+        return;
+    }
+
+    let processedData = [];
+    let binWidth = 0;
+    let minVal = 0;
+    let maxVal = 0;
+    let binWidthLog = 0;
+    let minLog = 0;
+    let maxLog = 0;
+
+    if (useLogX) {
+        // Logarithmic scale: filter values > 0
+        const positiveData = dataArray.filter(v => v > 0);
+        if (positiveData.length === 0) {
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.innerHTML = `
+                    <div class="chart-empty-msg" style="padding: 20px; text-align: center; color: var(--text-muted, #888); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 350px;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 8px; opacity: 0.5;">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                        </svg>
+                        <span>No strictly positive values (>0) for Log X scale in ${title}</span>
+                    </div>
+                `;
+            }
+            return;
+        }
+
+        const logData = positiveData.map(v => Math.log10(v));
+        minLog = Math.min(...logData);
+        maxLog = Math.max(...logData);
+
+        if (minLog === maxLog) {
+            minLog -= 0.5;
+            maxLog += 0.5;
+        }
+
+        binWidthLog = (maxLog - minLog) / binCount;
+        const bins = new Array(binCount).fill(0);
+
+        for (let v of logData) {
+            let idx = Math.floor((v - minLog) / binWidthLog);
+            if (idx >= binCount) idx = binCount - 1;
+            if (idx < 0) idx = 0;
+            bins[idx]++;
+        }
+
+        for (let i = 0; i < binCount; i++) {
+            const centerLog = minLog + (i + 0.5) * binWidthLog;
+            processedData.push([centerLog, bins[i]]);
+        }
+    } else {
+        // Linear scale
+        minVal = Math.min(...dataArray);
+        maxVal = Math.max(...dataArray);
+
+        if (minVal === maxVal) {
+            minVal -= 0.5;
+            maxVal += 0.5;
+        }
+
+        binWidth = (maxVal - minVal) / binCount;
+        const bins = new Array(binCount).fill(0);
+
+        for (let v of dataArray) {
+            let idx = Math.floor((v - minVal) / binWidth);
+            if (idx >= binCount) idx = binCount - 1;
+            if (idx < 0) idx = 0;
+            bins[idx]++;
+        }
+
+        for (let i = 0; i < binCount; i++) {
+            const center = minVal + (i + 0.5) * binWidth;
+            processedData.push([center, bins[i]]);
+        }
+    }
 
     Highcharts.chart(containerId, {
         chart: {
@@ -226,8 +309,24 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
         xAxis: {
             title: { text: xTitle, style: { color: tc.textMuted } },
             lineColor: tc.axisLine,
-            labels: { style: { color: tc.textMuted } },
-            type: useLogX ? 'logarithmic' : 'linear'
+            labels: {
+                style: { color: tc.textMuted },
+                formatter: function() {
+                    if (useLogX) {
+                        const rawVal = Math.pow(10, this.value);
+                        if (rawVal >= 1e6 || (rawVal > 0 && rawVal < 1e-3)) {
+                            return rawVal.toExponential(2);
+                        } else {
+                            return rawVal.toLocaleString(undefined, {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 4
+                            });
+                        }
+                    }
+                    return this.value;
+                }
+            },
+            type: 'linear' // Always linear because log-scale is visually linear in log-space!
         },
         yAxis: {
             title: { text: 'Count', style: { color: color } },
@@ -237,21 +336,47 @@ function createDistributionChart(containerId, dataArray, title, xTitle, color, b
             type: useLogY ? 'logarithmic' : 'linear',
             ...(useLogY ? {} : { min: 0 })
         },
+        plotOptions: {
+            column: {
+                pointPadding: 0,
+                borderWidth: 1,
+                borderColor: tc.bg,
+                groupPadding: 0,
+                shadow: false,
+                color: color,
+                turboThreshold: 0 // Disable turbo threshold to support more than 1000 bins!
+            }
+        },
+        tooltip: {
+            backgroundColor: tc.tooltipBg || '#000',
+            style: { color: tc.tooltipText || '#fff' },
+            formatter: function() {
+                if (useLogX) {
+                    const halfWidthLog = binWidthLog / 2;
+                    const bMin = Math.pow(10, this.x - halfWidthLog);
+                    const bMax = Math.pow(10, this.x + halfWidthLog);
+                    const fmtMin = bMin >= 1e6 || bMin < 1e-3 ? bMin.toExponential(3) : bMin.toFixed(4);
+                    const fmtMax = bMax >= 1e6 || bMax < 1e-3 ? bMax.toExponential(3) : bMax.toFixed(4);
+                    return `<b>Range:</b> ${fmtMin} - ${fmtMax} ${xTitle}<br/>` +
+                           `<b>Count:</b> ${this.y}`;
+                } else {
+                    const halfWidth = binWidth / 2;
+                    const bMin = this.x - halfWidth;
+                    const bMax = this.x + halfWidth;
+                    const fmtMin = Math.abs(bMin) >= 1e6 || (Math.abs(bMin) > 0 && Math.abs(bMin) < 1e-3) ? bMin.toExponential(3) : bMin.toFixed(4);
+                    const fmtMax = Math.abs(bMax) >= 1e6 || (Math.abs(bMax) > 0 && Math.abs(bMax) < 1e-3) ? bMax.toExponential(3) : bMax.toFixed(4);
+                    return `<b>Range:</b> ${fmtMin} - ${fmtMax} ${xTitle}<br/>` +
+                           `<b>Count:</b> ${this.y}`;
+                }
+            }
+        },
         series: [{
             name: 'Histogram',
-            type: 'histogram',
-            baseSeries: 'series_raw',
+            type: 'column',
+            data: processedData,
             id: 'series_hist',
             color: color,
-            binsNumber: binCount,
             zIndex: 1,
-            showInLegend: false
-        }, {
-            name: 'Data',
-            type: 'scatter',
-            data: dataArray,
-            id: 'series_raw',
-            visible: false,
             showInLegend: false
         }]
     });
