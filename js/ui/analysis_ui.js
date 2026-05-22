@@ -214,6 +214,7 @@ function showPeakDistributions(e) {
             if (window.calculateOptimalBins) {
                 try {
                     optimalBins = window.calculateOptimalBins(values);
+                    optimalBins = Math.min(1000, Math.max(5, optimalBins));
                 } catch (err) { console.error(err); }
             }
 

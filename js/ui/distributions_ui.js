@@ -221,7 +221,12 @@ function updateSingleDistChart(type) {
     let logyElem = document.getElementById('logy_' + type);
     if (logyElem) useLogY = logyElem.checked;
 
-    let binCount = parseInt(document.getElementById(binInputId).value) || 20;
+    let binElem = document.getElementById(binInputId);
+    let binCount = parseInt(binElem.value) || 20;
+    if (binCount > 1000) {
+        binCount = 1000;
+        binElem.value = 1000;
+    }
     if (window.createDistributionChart) window.createDistributionChart(containerId, scaledData, title, xTitle, color, binCount, type, useLogX, useLogY);
 }
 
