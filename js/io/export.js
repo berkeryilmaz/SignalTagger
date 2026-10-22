@@ -141,6 +141,85 @@ function exportSignalOnly() {
     closeModal('exportModal');
 }
 
+/**
+ * Her satır bir bölge (region) sinyal dalga formu olacak şekilde CSV formatında dışa aktarır.
+ * İlk sütun ID (Peak Analysis Table ID'si ile eşleşir).
+ * Sonraki sütunlar: s0, s1, s2, ..., s_{L-1}.
+ *
+ * @param {number} fixedLength - İstenen sabit sütun sayısı (0 = otomatik en geniş bölge boyu)
+ * @param {string} [filename] - Opsiyonel dosya adı
+ */
+function exportRegionWaveforms(fixedLength = 0, filename = null) {
+    if (!state.signal || state.signal.length === 0) return alert("Nothing to export!");
+
+    let regions = [];
+    if (window.analysisData && window.analysisData.length > 0) {
+        regions = window.analysisData.map((r, i) => ({
+            id: r.id !== undefined ? r.id : (i + 1),
+            start: r.start,
+            end: r.end
+        }));
+    } else if (state.labels && window.findLabeledRegions) {
+        regions = window.findLabeledRegions(state.labels).map((r, i) => ({
+            id: i + 1,
+            start: r.start,
+            end: r.end
+        }));
+    }
+
+    if (regions.length === 0) return alert("No labeled regions found to export!");
+
+    let L = parseInt(fixedLength) || 0;
+    if (L <= 0) {
+        L = Math.max(...regions.map(r => r.end - r.start + 1));
+    }
+    L = Math.max(1, L);
+
+    const sourceSignal = (state.isSmoothEnabled && state.smoothedSignal) ? state.smoothedSignal : state.signal;
+    const precision = (state && state.dataPrecision !== undefined) ? state.dataPrecision : 3;
+    const factor = Math.pow(10, precision);
+
+    let headers = ['id'];
+    for (let k = 0; k < L; k++) headers.push(`s${k}`);
+
+    let rows = regions.map(r => {
+        let rowVals = [r.id];
+        for (let k = 0; k < L; k++) {
+            let sIdx = r.start + k;
+            let val = 0;
+            if (sIdx >= 0 && sIdx < sourceSignal.length && sIdx <= r.end) {
+                val = sourceSignal[sIdx];
+            } else if (sIdx >= sourceSignal.length) {
+                val = sourceSignal[sourceSignal.length - 1];
+            } else {
+                val = 0;
+            }
+            if (val == null || isNaN(val)) {
+                rowVals.push('');
+            } else if (typeof val === 'number') {
+                let rounded = Math.round(val * factor) / factor;
+                rowVals.push(rounded);
+            } else {
+                rowVals.push(val);
+            }
+        }
+        return rowVals.join(',');
+    });
+
+    let csvContent = headers.join(',') + '\n' + rows.join('\n');
+    downloadCSV(csvContent, filename || `region_waveforms_${Date.now()}.csv`);
+    closeModal('exportModal');
+}
+
+function exportRegionWaveformsPrompt() {
+    let lenInput = prompt("Waveform length (column count) [0 or empty = auto / max region length]:", "0");
+    if (lenInput === null) return;
+    let L = parseInt(lenInput) || 0;
+    exportRegionWaveforms(L);
+}
+
 window.performExport = performExport;
 window.exportAnalysisTable = exportAnalysisTable;
 window.exportSignalOnly = exportSignalOnly;
+window.exportRegionWaveforms = exportRegionWaveforms;
+window.exportRegionWaveformsPrompt = exportRegionWaveformsPrompt;

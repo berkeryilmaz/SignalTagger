@@ -18,6 +18,35 @@ function _isSignalOrArray(v) {
     return v instanceof Float32Array || v instanceof Int8Array || v instanceof Uint8Array || Array.isArray(v);
 }
 
+// --- REGION & SIGNAL RESOLUTION HELPERS ---
+function _normalizeRegions(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+        return raw.filter(r => r && typeof r === 'object').map(r => ({ ...r }));
+    }
+    if (typeof raw === 'object' && raw.start !== undefined && raw.end !== undefined) {
+        return [{ ...raw }];
+    }
+    return [];
+}
+
+function _resolveSignal(sigInput) {
+    if (sigInput instanceof Float32Array) return sigInput;
+    if (Array.isArray(sigInput)) return new Float32Array(sigInput);
+    if (sigInput && (sigInput instanceof Int8Array || sigInput instanceof Uint8Array)) {
+        let out = new Float32Array(sigInput.length);
+        for (let i = 0; i < sigInput.length; i++) out[i] = sigInput[i];
+        return out;
+    }
+    if (window.state) {
+        if (window.state.isSmoothEnabled && window.state.smoothedSignal) {
+            return window.state.smoothedSignal;
+        }
+        if (window.state.signal) return window.state.signal;
+    }
+    return null;
+}
+
 function _toFloat32(v) {
     if (v instanceof Float32Array) return v;
     if (Array.isArray(v)) return new Float32Array(v);
@@ -114,6 +143,11 @@ const NODE_TYPES = {
         outputs: [{ name: 'str', type: 'string' }],
         exec: (inputs, params) => ({ str: params.value })
     },
+    'AppPrecision': {
+        category: 'Input', name: 'App Precision (Prec)',
+        outputs: [{ name: 'precision', type: 'number' }],
+        exec: () => ({ precision: (window.state && window.state.dataPrecision !== undefined) ? window.state.dataPrecision : 3 })
+    },
     'RefSource': {
         category: 'Input', name: 'Reference Signal',
         params: [{ name: 'index', type: 'number', default: 0 }],
@@ -157,7 +191,20 @@ const NODE_TYPES = {
     'Min': { category: 'Math', name: 'Min', inputs: [{ name: 'a', type: 'any' }, { name: 'b', type: 'any' }], outputs: [{ name: 'out', type: 'any' }], exec: (inputs) => _mathBinary(inputs.a, inputs.b, (a, b) => Math.min(a, b)) },
     'Max': { category: 'Math', name: 'Max', inputs: [{ name: 'a', type: 'any' }, { name: 'b', type: 'any' }], outputs: [{ name: 'out', type: 'any' }], exec: (inputs) => _mathBinary(inputs.a, inputs.b, (a, b) => Math.max(a, b)) },
     'Clamp': { category: 'Math', name: 'Clamp', inputs: [{ name: 'val', type: 'any' }], params: [{ name: 'min', type: 'number', default: 0 }, { name: 'max', type: 'number', default: 1 }], outputs: [{ name: 'out', type: 'any' }], exec: (inputs, params) => _mathUnary(inputs.val, v => Math.min(Math.max(v, parseFloat(params.min)), parseFloat(params.max))) },
-    'Round': { category: 'Math', name: 'Round', inputs: [{ name: 'a', type: 'any' }], outputs: [{ name: 'out', type: 'any' }], exec: (inputs) => _mathUnary(inputs.a, a => Math.round(a)) },
+    'Round': {
+        category: 'Math', name: 'Round (Precision)',
+        inputs: [{ name: 'a', type: 'any' }, { name: 'precision', type: 'number' }],
+        params: [{ name: 'precision', type: 'number', default: -1 }],
+        outputs: [{ name: 'out', type: 'any' }],
+        exec: (inputs, params) => {
+            let p = inputs.precision !== undefined ? parseInt(inputs.precision) : parseInt(params.precision);
+            if (isNaN(p) || p < 0) {
+                p = (window.state && window.state.dataPrecision !== undefined) ? window.state.dataPrecision : 3;
+            }
+            let factor = Math.pow(10, p);
+            return _mathUnary(inputs.a, a => Math.round(a * factor) / factor);
+        }
+    },
     'Floor': { category: 'Math', name: 'Floor', inputs: [{ name: 'a', type: 'any' }], outputs: [{ name: 'out', type: 'any' }], exec: (inputs) => _mathUnary(inputs.a, a => Math.floor(a)) },
     'Ceil': { category: 'Math', name: 'Ceil', inputs: [{ name: 'a', type: 'any' }], outputs: [{ name: 'out', type: 'any' }], exec: (inputs) => _mathUnary(inputs.a, a => Math.ceil(a)) },
     'Sin': { category: 'Math', name: 'Sin', inputs: [{ name: 'a', type: 'any' }], outputs: [{ name: 'out', type: 'any' }], exec: (inputs) => _mathUnary(inputs.a, a => Math.sin(a)) },
@@ -401,6 +448,77 @@ const NODE_TYPES = {
                 out[i] = sum / count;
             }
             return { out };
+        }
+    },
+    'ExtractRegionWaveforms': {
+        category: 'Signal Ops', name: 'Extract Region Waveforms',
+        inputs: [
+            { name: 'regions', type: 'array' },
+            { name: 'sig', type: 'signal' },
+            { name: 'length', type: 'number' },
+            { name: 'precision', type: 'number' }
+        ],
+        params: [
+            { name: 'fixedLength', type: 'number', default: 0 },
+            { name: 'precision', type: 'number', default: -1 },
+            { name: 'align', type: 'string', default: 'start', options: ['start', 'center', 'end'] },
+            { name: 'padValue', type: 'string', default: 'zero', options: ['zero', 'edge', 'baseline', 'nan'] }
+        ],
+        outputs: [{ name: 'waveforms', type: 'array' }, { name: 'count', type: 'number' }, { name: 'length', type: 'number' }],
+        exec: (inputs, params) => {
+            let regs = _normalizeRegions(inputs.regions || inputs.results || inputs.arr || inputs.filtered);
+            let sig = _resolveSignal(inputs.sig);
+            if (!sig) throw new Error("Extract Region Waveforms: No signal available.");
+            if (regs.length === 0) return { waveforms: [], count: 0, length: 0 };
+
+            let L = 0;
+            if (inputs.length !== undefined && Number(inputs.length) > 0) {
+                L = Math.round(Number(inputs.length));
+            } else if (parseInt(params.fixedLength) > 0) {
+                L = parseInt(params.fixedLength);
+            } else {
+                L = Math.max(...regs.map(r => r.end - r.start + 1));
+            }
+            L = Math.max(1, L);
+
+            const align = params.align || 'start';
+            const padMode = params.padValue || 'zero';
+            const baseVal = (window.state && window.state.isBaselineEnabled) ? window.state.baselineValue : 0;
+
+            let p = inputs.precision !== undefined ? parseInt(inputs.precision) : parseInt(params.precision);
+            let factor = (!isNaN(p) && p >= 0) ? Math.pow(10, p) : null;
+
+            let waveforms = regs.map(r => {
+                let out = new Float32Array(L);
+                let startIdx = r.start;
+                if (align === 'end') {
+                    startIdx = r.end - L + 1;
+                } else if (align === 'center') {
+                    let center = Math.round((r.start + r.end) / 2);
+                    startIdx = center - Math.floor((L - 1) / 2);
+                }
+
+                for (let k = 0; k < L; k++) {
+                    let sIdx = startIdx + k;
+                    let val = 0;
+                    if (sIdx >= 0 && sIdx < sig.length) {
+                        val = sig[sIdx];
+                    } else {
+                        if (padMode === 'edge') val = sIdx < 0 ? sig[0] : sig[sig.length - 1];
+                        else if (padMode === 'baseline') val = baseVal;
+                        else if (padMode === 'nan') val = NaN;
+                        else val = 0;
+                    }
+                    if (factor !== null && typeof val === 'number' && !isNaN(val)) {
+                        out[k] = Math.round(val * factor) / factor;
+                    } else {
+                        out[k] = val;
+                    }
+                }
+                return out;
+            });
+
+            return { waveforms, count: waveforms.length, length: L };
         }
     },
 
@@ -654,6 +772,274 @@ const NODE_TYPES = {
             return { out_regions };
         }
     },
+    'AdjustRegionBounds': {
+        category: 'Analysis', name: 'Extend / Trim Regions',
+        inputs: [{ name: 'regions', type: 'array' }, { name: 'extendStart', type: 'number' }, { name: 'extendEnd', type: 'number' }, { name: 'sig', type: 'signal' }],
+        params: [
+            { name: 'extendStart', type: 'number', default: 0 },
+            { name: 'extendEnd', type: 'number', default: 0 },
+            { name: 'clampToSignal', type: 'boolean', default: true }
+        ],
+        outputs: [{ name: 'regions', type: 'array' }],
+        exec: (inputs, params) => {
+            let regs = _normalizeRegions(inputs.regions || inputs.results || inputs.arr || inputs.filtered || inputs.expanded);
+            if (regs.length === 0) return { regions: [] };
+
+            let extStart = inputs.extendStart !== undefined ? Number(inputs.extendStart) : (parseFloat(params.extendStart) || 0);
+            let extEnd = inputs.extendEnd !== undefined ? Number(inputs.extendEnd) : (parseFloat(params.extendEnd) || 0);
+            let clamp = params.clampToSignal === true || params.clampToSignal === 'true';
+            let sig = _resolveSignal(inputs.sig);
+            let maxLen = sig ? sig.length : Infinity;
+
+            let updated = regs.map((r, i) => {
+                let id = r.id !== undefined ? r.id : (i + 1);
+                // Pozitif extendStart sola genişletir (start azalır), negatif daraltır
+                let newStart = Math.round(r.start - extStart);
+                // Pozitif extendEnd sağa genişletir (end artar), negatif daraltır
+                let newEnd = Math.round(r.end + extEnd);
+
+                if (clamp && maxLen < Infinity) {
+                    newStart = Math.max(0, Math.min(newStart, maxLen - 1));
+                    newEnd = Math.max(0, Math.min(newEnd, maxLen - 1));
+                }
+
+                if (newStart > newEnd) {
+                    let mid = Math.round((newStart + newEnd) / 2);
+                    newStart = mid;
+                    newEnd = mid;
+                }
+
+                return {
+                    ...r,
+                    id: id,
+                    start: newStart,
+                    end: newEnd,
+                    width: newEnd - newStart + 1
+                };
+            });
+
+            return { regions: updated };
+        }
+    },
+    'FindRegionExtremum': {
+        category: 'Analysis', name: 'Region Extremum to Region',
+        inputs: [{ name: 'regions', type: 'array' }, { name: 'sig', type: 'signal' }, { name: 'before', type: 'number' }, { name: 'after', type: 'number' }],
+        params: [
+            { name: 'mode', type: 'string', default: 'max', options: ['max', 'min', 'abs_max'] },
+            { name: 'before', type: 'number', default: 0 },
+            { name: 'after', type: 'number', default: 0 },
+            { name: 'clampToSignal', type: 'boolean', default: true }
+        ],
+        outputs: [{ name: 'regions', type: 'array' }, { name: 'indices', type: 'array' }, { name: 'values', type: 'array' }],
+        exec: (inputs, params) => {
+            let regs = _normalizeRegions(inputs.regions || inputs.results || inputs.arr || inputs.filtered || inputs.expanded);
+            let sig = _resolveSignal(inputs.sig);
+            if (!sig) throw new Error("Region Extremum: No signal available.");
+            if (regs.length === 0) return { regions: [], indices: new Float32Array(0), values: new Float32Array(0) };
+
+            let mode = params.mode || 'max';
+            let before = inputs.before !== undefined ? Math.max(0, parseInt(inputs.before) || 0) : Math.max(0, parseInt(params.before) || 0);
+            let after = inputs.after !== undefined ? Math.max(0, parseInt(inputs.after) || 0) : Math.max(0, parseInt(params.after) || 0);
+            let clamp = params.clampToSignal === true || params.clampToSignal === 'true';
+
+            let outRegions = [];
+            let indices = [];
+            let values = [];
+
+            regs.forEach((r, i) => {
+                let id = r.id !== undefined ? r.id : (i + 1);
+                let sStart = Math.max(0, Math.min(r.start, sig.length - 1));
+                let sEnd = Math.max(0, Math.min(r.end, sig.length - 1));
+                if (sStart > sEnd) { let t = sStart; sStart = sEnd; sEnd = t; }
+
+                let bestIdx = sStart;
+                let bestVal = sig[sStart];
+
+                for (let j = sStart; j <= sEnd; j++) {
+                    let v = sig[j];
+                    if (mode === 'max' && v > bestVal) {
+                        bestVal = v;
+                        bestIdx = j;
+                    } else if (mode === 'min' && v < bestVal) {
+                        bestVal = v;
+                        bestIdx = j;
+                    } else if (mode === 'abs_max' && Math.abs(v) > Math.abs(bestVal)) {
+                        bestVal = v;
+                        bestIdx = j;
+                    }
+                }
+
+                indices.push(bestIdx);
+                values.push(bestVal);
+
+                let newStart = bestIdx - before;
+                let newEnd = bestIdx + after;
+
+                if (clamp) {
+                    newStart = Math.max(0, Math.min(newStart, sig.length - 1));
+                    newEnd = Math.max(0, Math.min(newEnd, sig.length - 1));
+                }
+                if (newStart > newEnd) newEnd = newStart;
+
+                outRegions.push({
+                    ...r,
+                    id: id,
+                    start: newStart,
+                    end: newEnd,
+                    width: newEnd - newStart + 1,
+                    extremumIndex: bestIdx,
+                    extremumValue: bestVal
+                });
+            });
+
+            return {
+                regions: outRegions,
+                indices: new Float32Array(indices),
+                values: new Float32Array(values)
+            };
+        }
+    },
+    'EqualizeRegionLengths': {
+        category: 'Analysis', name: 'Equalize Region Lengths',
+        inputs: [{ name: 'regions', type: 'array' }, { name: 'sig', type: 'signal' }, { name: 'length', type: 'number' }],
+        params: [
+            { name: 'targetLength', type: 'number', default: 0 },
+            { name: 'cropLonger', type: 'boolean', default: 'true', options: ['true', 'false'] },
+            { name: 'expandShorter', type: 'boolean', default: 'true', options: ['true', 'false'] },
+            { name: 'autoMode', type: 'string', default: 'max', options: ['max', 'min', 'median', 'mean'] },
+            { name: 'anchor', type: 'string', default: 'center', options: ['center', 'start', 'end', 'peak'] },
+            { name: 'clampToSignal', type: 'boolean', default: 'true', options: ['true', 'false'] }
+        ],
+        outputs: [{ name: 'regions', type: 'array' }, { name: 'length', type: 'number' }],
+        exec: (inputs, params, node) => {
+            let regs = _normalizeRegions(inputs.regions || inputs.results || inputs.arr || inputs.filtered || inputs.expanded);
+            if (regs.length === 0) return { regions: [], length: 0 };
+
+            let sig = _resolveSignal(inputs.sig);
+            let widths = regs.map(r => r.end - r.start + 1);
+
+            let L = 0;
+            if (inputs.length !== undefined && Number(inputs.length) > 0) {
+                L = Math.round(Number(inputs.length));
+            } else if (parseInt(params.targetLength) > 0) {
+                L = parseInt(params.targetLength);
+            } else {
+                let am = params.autoMode || 'max';
+                if (am === 'min') L = Math.min(...widths);
+                else if (am === 'mean') L = Math.round(widths.reduce((a, b) => a + b, 0) / widths.length);
+                else if (am === 'median') {
+                    let sorted = [...widths].sort((a, b) => a - b);
+                    L = sorted[Math.floor(sorted.length / 2)];
+                } else {
+                    L = Math.max(...widths);
+                }
+            }
+            L = Math.max(1, L);
+
+            const anchor = params.anchor || 'center';
+            const clamp = params.clampToSignal === true || params.clampToSignal === 'true';
+            const allowCrop = params.cropLonger === true || params.cropLonger === 'true' || params.cropLonger === undefined;
+            const allowExpand = params.expandShorter === true || params.expandShorter === 'true' || params.expandShorter === undefined;
+
+            let outRegions = regs.map((r, i) => {
+                let id = r.id !== undefined ? r.id : (i + 1);
+                let curW = r.end - r.start + 1;
+
+                // Hedef uzunluktan büyük ve kırpmaya izin verilmiyorsa orijinal boyutu koru
+                if (curW > L && !allowCrop) {
+                    return {
+                        ...r,
+                        id: id,
+                        start: r.start,
+                        end: r.end,
+                        width: curW
+                    };
+                }
+
+                // Hedef uzunluktan küçük ve genişletmeye izin verilmiyorsa orijinal boyutu koru
+                if (curW < L && !allowExpand) {
+                    return {
+                        ...r,
+                        id: id,
+                        start: r.start,
+                        end: r.end,
+                        width: curW
+                    };
+                }
+
+                let newStart = r.start;
+                let newEnd = r.end;
+
+                if (anchor === 'start') {
+                    newStart = r.start;
+                    newEnd = r.start + L - 1;
+                } else if (anchor === 'end') {
+                    newEnd = r.end;
+                    newStart = r.end - L + 1;
+                } else if (anchor === 'peak' && sig) {
+                    let sStart = Math.max(0, Math.min(r.start, sig.length - 1));
+                    let sEnd = Math.max(0, Math.min(r.end, sig.length - 1));
+                    let pkIdx = sStart, pkVal = sig[sStart];
+                    for (let j = sStart; j <= sEnd; j++) {
+                        if (sig[j] > pkVal) { pkVal = sig[j]; pkIdx = j; }
+                    }
+                    let halfBefore = Math.floor((L - 1) / 2);
+                    newStart = pkIdx - halfBefore;
+                    newEnd = newStart + L - 1;
+                } else {
+                    // 'center'
+                    let center = Math.round((r.start + r.end) / 2);
+                    let halfBefore = Math.floor((L - 1) / 2);
+                    newStart = center - halfBefore;
+                    newEnd = newStart + L - 1;
+                }
+
+                if (clamp && sig) {
+                    if (newStart < 0) {
+                        let shift = -newStart;
+                        newStart = 0;
+                        newEnd = Math.min(sig.length - 1, newEnd + shift);
+                    }
+                    if (newEnd >= sig.length) {
+                        let shift = newEnd - (sig.length - 1);
+                        newEnd = sig.length - 1;
+                        newStart = Math.max(0, newStart - shift);
+                    }
+                }
+
+                return {
+                    ...r,
+                    id: id,
+                    start: newStart,
+                    end: newEnd,
+                    width: newEnd - newStart + 1
+                };
+            });
+
+            let maxOutL = outRegions.length > 0 ? Math.max(...outRegions.map(r => r.width)) : L;
+
+            if (node && node.el) {
+                let statusDiv = node.el.querySelector('.ne-equalize-status');
+                if (!statusDiv) {
+                    statusDiv = document.createElement('div');
+                    statusDiv.className = 'ne-equalize-status';
+                    statusDiv.style.padding = '4px 6px';
+                    statusDiv.style.marginTop = '6px';
+                    statusDiv.style.background = 'rgba(76, 175, 80, 0.15)';
+                    statusDiv.style.border = '1px solid var(--ne-cat-analysis)';
+                    statusDiv.style.borderRadius = '3px';
+                    statusDiv.style.fontSize = '11px';
+                    statusDiv.style.color = 'var(--text-main)';
+                    node.el.appendChild(statusDiv);
+                }
+                let minW = Math.min(...outRegions.map(r => r.width));
+                let maxW = Math.max(...outRegions.map(r => r.width));
+                statusDiv.textContent = `✓ ${outRegions.length} regions (Target: ${L}, Widths: ${minW === maxW ? minW : minW + '..' + maxW})`;
+            }
+
+            return { regions: outRegions, length: maxOutL };
+        }
+    },
 
     // --- PHYSICS ---
     'CalculatePhysics': {
@@ -665,7 +1051,10 @@ const NODE_TYPES = {
 
     // --- OUTPUT ---
     'DisplayValue': {
-        category: 'Output', name: 'Display Value', inputs: [{ name: 'val', type: 'any' }], outputs: [],
+        category: 'Output', name: 'Display Value',
+        inputs: [{ name: 'val', type: 'any' }, { name: 'precision', type: 'number' }],
+        params: [{ name: 'precision', type: 'number', default: -1 }],
+        outputs: [],
         exec: (inputs, params, node) => {
             let val = inputs.val;
             if (val === undefined) return {};
@@ -679,14 +1068,29 @@ const NODE_TYPES = {
                 displayDiv.style.borderRadius = '3px';
                 displayDiv.style.fontSize = '12px';
                 displayDiv.style.wordBreak = 'break-all';
-                displayDiv.style.maxHeight = '60px';
+                displayDiv.style.maxHeight = '80px';
                 displayDiv.style.overflow = 'auto';
                 node.el.appendChild(displayDiv);
             }
-            if (typeof val === 'number') displayDiv.textContent = val.toString().length > 10 ? val.toFixed(6) : val;
-            else if (val instanceof Float32Array || val instanceof Int8Array || val instanceof Uint8Array || Array.isArray(val)) displayDiv.textContent = `Array [${val.length}]`;
-            else if (typeof val === 'object') displayDiv.textContent = JSON.stringify(val);
-            else displayDiv.textContent = String(val);
+
+            let p = inputs.precision !== undefined ? parseInt(inputs.precision) : parseInt(params.precision);
+            if (isNaN(p) || p < 0) {
+                p = (window.state && window.state.dataPrecision !== undefined) ? window.state.dataPrecision : 3;
+            }
+            const factor = Math.pow(10, p);
+            const roundVal = num => (typeof num === 'number' && !isNaN(num)) ? (Math.round(num * factor) / factor) : num;
+
+            if (typeof val === 'number') {
+                displayDiv.textContent = roundVal(val);
+            } else if (val instanceof Float32Array || val instanceof Int8Array || val instanceof Uint8Array || Array.isArray(val)) {
+                let preview = Array.from(val.slice(0, 6)).map(v => typeof v === 'number' ? roundVal(v) : v);
+                let more = val.length > 6 ? `, ... +${val.length - 6} more` : '';
+                displayDiv.textContent = `[${preview.join(', ')}${more}] (${val.length})`;
+            } else if (typeof val === 'object') {
+                displayDiv.textContent = JSON.stringify(val);
+            } else {
+                displayDiv.textContent = String(val);
+            }
             return {};
         }
     },
@@ -765,18 +1169,25 @@ const NODE_TYPES = {
     'DisplayResults': {
         category: 'Output', name: 'Table Analysis Data', inputs: [{ name: 'results', type: 'array' }], outputs: [],
         exec: (inputs) => {
-            if (!inputs.results) return {};
+            let res = inputs.results || inputs.regions;
+            if (!res) return {};
             if (!window.analysisData) window.analysisData = [];
             let currentOffset = window.analysisData.length;
-            let newData = inputs.results.map((r, i) => ({ id: currentOffset + i + 1, label: r.label !== undefined ? r.label : 2, ...r }));
+            let arr = _normalizeRegions(res);
+            let newData = arr.map((r, i) => ({
+                id: r.id !== undefined ? r.id : (currentOffset + i + 1),
+                label: r.label !== undefined ? r.label : 2,
+                ...r
+            }));
             window.analysisData = window.analysisData.concat(newData);
+            if (window.renderAnalysisTable) window.renderAnalysisTable();
             return {};
         }
     },
     'SaveSignal': {
         category: 'Output', name: 'Save Signal',
-        inputs: [{ name: 'sig', type: 'signal' }, { name: 'filename', type: 'any' }],
-        params: [{ name: 'defaultName', type: 'string', default: 'exported_signal' }],
+        inputs: [{ name: 'sig', type: 'signal' }, { name: 'filename', type: 'any' }, { name: 'precision', type: 'number' }],
+        params: [{ name: 'defaultName', type: 'string', default: 'exported_signal' }, { name: 'precision', type: 'number', default: -1 }],
         outputs: [],
         exec: (inputs, params, node) => {
             let sig = inputs.sig;
@@ -784,16 +1195,24 @@ const NODE_TYPES = {
             let name = inputs.filename || params.defaultName || 'signal';
             if (!name.endsWith('.csv')) name += '.csv';
 
+            let p = inputs.precision !== undefined ? parseInt(inputs.precision) : parseInt(params.precision);
+            if (isNaN(p) || p < 0) {
+                p = (window.state && window.state.dataPrecision !== undefined) ? window.state.dataPrecision : 3;
+            }
+            let factor = Math.pow(10, p);
+
             // Prevent excessive download spam if inputs haven't changed
-            if (node.lastSavedSignal === sig && node.lastSavedFilename === name) {
+            if (node.lastSavedSignal === sig && node.lastSavedFilename === name && node.lastSavedPrec === p) {
                 return {};
             }
             node.lastSavedSignal = sig;
             node.lastSavedFilename = name;
+            node.lastSavedPrec = p;
 
             let rows = [];
             for (let i = 0; i < sig.length; i++) {
-                rows.push(`${i},${sig[i]}`);
+                let v = Math.round(sig[i] * factor) / factor;
+                rows.push(`${i},${v}`);
             }
             let csvContent = "index,voltage\n" + rows.join("\n");
 
@@ -807,6 +1226,134 @@ const NODE_TYPES = {
             document.body.removeChild(link);
 
             return {};
+        }
+    },
+    'ExportRegionWaveforms': {
+        category: 'Output', name: 'Export Waveforms CSV',
+        inputs: [
+            { name: 'regions', type: 'array' },
+            { name: 'sig', type: 'signal' },
+            { name: 'filename', type: 'any' },
+            { name: 'length', type: 'number' },
+            { name: 'precision', type: 'number' }
+        ],
+        params: [
+            { name: 'defaultName', type: 'string', default: 'region_waveforms' },
+            { name: 'fixedLength', type: 'number', default: 0 },
+            { name: 'precision', type: 'number', default: -1 },
+            { name: 'align', type: 'string', default: 'start', options: ['start', 'center', 'end'] },
+            { name: 'padValue', type: 'string', default: 'zero', options: ['zero', 'edge', 'baseline', 'nan'] }
+        ],
+        outputs: [{ name: 'waveforms', type: 'array' }, { name: 'count', type: 'number' }],
+        exec: (inputs, params, node) => {
+            let regs = _normalizeRegions(inputs.regions || inputs.results || inputs.arr || inputs.filtered || inputs.expanded);
+            if (regs.length === 0) {
+                console.warn("Export Waveforms: No regions provided.");
+                return { waveforms: [], count: 0 };
+            }
+
+            let sig = _resolveSignal(inputs.sig);
+            if (!sig) throw new Error("Export Waveforms: No signal available.");
+
+            let name = inputs.filename || params.defaultName || 'region_waveforms';
+            if (!name.endsWith('.csv')) name += '.csv';
+
+            let L = 0;
+            if (inputs.length !== undefined && Number(inputs.length) > 0) {
+                L = Math.round(Number(inputs.length));
+            } else if (parseInt(params.fixedLength) > 0) {
+                L = parseInt(params.fixedLength);
+            } else {
+                L = Math.max(...regs.map(r => r.end - r.start + 1));
+            }
+            L = Math.max(1, L);
+
+            const align = params.align || 'start';
+            const padMode = params.padValue || 'zero';
+            const baseVal = (window.state && window.state.isBaselineEnabled) ? window.state.baselineValue : 0;
+
+            let p = inputs.precision !== undefined ? parseInt(inputs.precision) : parseInt(params.precision);
+            if (isNaN(p) || p < 0) {
+                p = (window.state && window.state.dataPrecision !== undefined) ? window.state.dataPrecision : 3;
+            }
+            const factor = Math.pow(10, p);
+
+            // Generate CSV Headers: id,s0,s1,s2,...,s_{L-1}
+            let headers = ['id'];
+            for (let k = 0; k < L; k++) headers.push(`s${k}`);
+
+            let extractedWaveforms = [];
+            let csvRows = [];
+
+            regs.forEach((r, i) => {
+                let id = r.id !== undefined ? r.id : (i + 1);
+                let rowVals = [id];
+                let wf = new Float32Array(L);
+
+                let startIdx = r.start;
+                if (align === 'end') {
+                    startIdx = r.end - L + 1;
+                } else if (align === 'center') {
+                    let center = Math.round((r.start + r.end) / 2);
+                    startIdx = center - Math.floor((L - 1) / 2);
+                }
+
+                for (let k = 0; k < L; k++) {
+                    let sIdx = startIdx + k;
+                    let val = 0;
+                    if (sIdx >= 0 && sIdx < sig.length) {
+                        val = sig[sIdx];
+                    } else {
+                        if (padMode === 'edge') val = sIdx < 0 ? sig[0] : sig[sig.length - 1];
+                        else if (padMode === 'baseline') val = baseVal;
+                        else if (padMode === 'nan') val = NaN;
+                        else val = 0; // 'zero'
+                    }
+                    wf[k] = val;
+                    if (isNaN(val)) {
+                        rowVals.push('');
+                    } else if (typeof val === 'number') {
+                        let rounded = Math.round(val * factor) / factor;
+                        rowVals.push(rounded);
+                    } else {
+                        rowVals.push(val);
+                    }
+                }
+
+                extractedWaveforms.push(wf);
+                csvRows.push(rowVals.join(','));
+            });
+
+            let csvContent = headers.join(',') + '\n' + csvRows.join('\n');
+
+            let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            let url = URL.createObjectURL(blob);
+            let link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", name);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+            if (node && node.el) {
+                let statusDiv = node.el.querySelector('.ne-export-status');
+                if (!statusDiv) {
+                    statusDiv = document.createElement('div');
+                    statusDiv.className = 'ne-export-status';
+                    statusDiv.style.padding = '4px 6px';
+                    statusDiv.style.marginTop = '6px';
+                    statusDiv.style.background = 'rgba(38, 166, 154, 0.15)';
+                    statusDiv.style.border = '1px solid var(--ne-cat-output)';
+                    statusDiv.style.borderRadius = '3px';
+                    statusDiv.style.fontSize = '11px';
+                    statusDiv.style.color = 'var(--text-main)';
+                    node.el.appendChild(statusDiv);
+                }
+                statusDiv.textContent = `✓ Exported ${regs.length} waves (${L} pts) to ${name}`;
+            }
+
+            return { waveforms: extractedWaveforms, count: regs.length };
         }
     }
 };
@@ -1479,6 +2026,19 @@ class NodeEditor {
             window.analysisData = [];
         }
 
+        // Ensure all parameter values from DOM elements are synced to node params before execution
+        order.forEach(id => {
+            let n = this.nodes[id];
+            if (n && n.el) {
+                n.el.querySelectorAll('.ne-node-params [data-param]').forEach(el => {
+                    const pName = el.dataset.param;
+                    if (pName) {
+                        n.params[pName] = el.value;
+                    }
+                });
+            }
+        });
+
         let contextOutputs = {}; // node_id: { port: val }
 
         for (let id of order) {
@@ -1509,7 +2069,11 @@ class NodeEditor {
 
         // Finalize
         Object.values(this.nodes).forEach(n => n.el.classList.remove('executing'));
-        if (window.updatePeakAnalysis) window.updatePeakAnalysis(null, true);
+        if (order.some(id => this.nodes[id].type === 'DisplayResults')) {
+            if (window.renderAnalysisTable) window.renderAnalysisTable(true);
+        } else {
+            if (window.updatePeakAnalysis) window.updatePeakAnalysis(null, true);
+        }
         if (window.draw) window.draw(true);
     }
 
@@ -1618,8 +2182,21 @@ class NodeEditor {
 
 // --- GLOBAL EXPOSURE & UI BINDING ---
 
+window.setNodeEditorPrecision = function (val) {
+    let p = parseInt(val);
+    if (isNaN(p) || p < 0) p = 3;
+    p = Math.min(9, Math.max(0, p));
+    if (window.state) window.state.dataPrecision = p;
+    let mainInput = document.getElementById('precisionInput');
+    if (mainInput && parseInt(mainInput.value) !== p) mainInput.value = p;
+    let neInput = document.getElementById('nePrecisionInput');
+    if (neInput && parseInt(neInput.value) !== p) neInput.value = p;
+    if (window.updatePrecision) window.updatePrecision();
+};
+
 window.openNodeEditor = function () {
     let mod = document.getElementById('nodeEditorModal');
+    let currentPrec = (window.state && window.state.dataPrecision !== undefined) ? window.state.dataPrecision : 3;
     if (!mod.querySelector('.ne-canvas')) {
         // Build DOM structure
         mod.innerHTML = `
@@ -1627,6 +2204,11 @@ window.openNodeEditor = function () {
                 <div class="ne-toolbar-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"></rect><line x1="6" y1="12" x2="18" y2="12"></line><line x1="12" y1="6" x2="12" y2="18"></line></svg> Node Pipeline Editor</div>
                 <div class="divider"></div>
                 <button class="ne-toolbar-btn ne-run-btn" onclick="window.nodeEditor.run()">▶ Run Pipeline</button>
+                <div class="divider"></div>
+                <div class="ne-toolbar-prec" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:inherit;" title="Global Data Precision (Decimals)">
+                    <span style="opacity:0.85;">Prec:</span>
+                    <input type="number" id="nePrecisionInput" min="0" max="9" step="1" value="${currentPrec}" onchange="window.setNodeEditorPrecision(this.value)" style="width:46px;padding:2px 4px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.22);color:inherit;border-radius:3px;text-align:center;font-size:12px;">
+                </div>
                 <div class="divider"></div>
                 <button class="ne-toolbar-btn" onclick="window.nodeEditor.clear();">🗑 Clear</button>
                 <button class="ne-toolbar-btn" onclick="window.nodeEditor.fitView();" title="Fit all nodes in view">⊞ Fit</button>
@@ -1649,6 +2231,9 @@ window.openNodeEditor = function () {
             </div>
         `;
         window.nodeEditor = new NodeEditor('nodeEditorModal');
+    } else {
+        let neInput = mod.querySelector('#nePrecisionInput');
+        if (neInput) neInput.value = currentPrec;
     }
     mod.classList.add('active');
     // Update minimap after visible
@@ -1656,3 +2241,5 @@ window.openNodeEditor = function () {
         if (window.nodeEditor) window.nodeEditor.updateMinimap();
     });
 };
+
+window.NODE_TYPES = NODE_TYPES;
