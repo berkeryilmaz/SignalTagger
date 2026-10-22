@@ -1,0 +1,297 @@
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "SignalSource",
+      "x": 50,
+      "y": 150,
+      "params": {}
+    },
+    {
+      "id": "n2",
+      "type": "SlidingWindow",
+      "x": 280,
+      "y": 150,
+      "params": {
+        "windowSize": 64,
+        "stride": 16
+      }
+    },
+    {
+      "id": "n18",
+      "type": "RefSource",
+      "x": 50,
+      "y": 10,
+      "params": {
+        "index": 0
+      }
+    },
+    {
+      "id": "n19",
+      "type": "SlidingWindow",
+      "x": 280,
+      "y": 10,
+      "params": {
+        "windowSize": 64,
+        "stride": 16
+      }
+    },
+    {
+      "id": "n3",
+      "type": "InputLayer",
+      "x": 50,
+      "y": 450,
+      "params": {
+        "shape": "64,1"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "Conv1D",
+      "x": 260,
+      "y": 450,
+      "params": {
+        "filters": 8,
+        "kernelSize": 3,
+        "strides": 1,
+        "padding": "same",
+        "activation": "relu"
+      }
+    },
+    {
+      "id": "n5",
+      "type": "MaxPooling1D",
+      "x": 470,
+      "y": 450,
+      "params": {
+        "poolSize": 2,
+        "strides": 2,
+        "padding": "same"
+      }
+    },
+    {
+      "id": "n6",
+      "type": "Conv1D",
+      "x": 680,
+      "y": 450,
+      "params": {
+        "filters": 16,
+        "kernelSize": 3,
+        "strides": 1,
+        "padding": "same",
+        "activation": "relu"
+      }
+    },
+    {
+      "id": "n7",
+      "type": "Conv1DTranspose",
+      "x": 890,
+      "y": 450,
+      "params": {
+        "filters": 8,
+        "kernelSize": 3,
+        "strides": 2,
+        "padding": "same",
+        "activation": "relu"
+      }
+    },
+    {
+      "id": "n8",
+      "type": "Concatenate",
+      "x": 1100,
+      "y": 450,
+      "params": {
+        "axis": -1
+      }
+    },
+    {
+      "id": "n9",
+      "type": "Conv1D",
+      "x": 1310,
+      "y": 450,
+      "params": {
+        "filters": 1,
+        "kernelSize": 1,
+        "strides": 1,
+        "padding": "same",
+        "activation": "sigmoid"
+      }
+    },
+    {
+      "id": "n10",
+      "type": "ModelCompiler",
+      "x": 1520,
+      "y": 450,
+      "params": {
+        "optimizer": "adam",
+        "loss": "binaryCrossentropy"
+      }
+    },
+    {
+      "id": "n11",
+      "type": "ModelTrainer",
+      "x": 1750,
+      "y": 220,
+      "params": {
+        "epochs": 20,
+        "batchSize": 8,
+        "validationSplit": 0.1
+      }
+    },
+    {
+      "id": "n12",
+      "type": "LatentExtractor",
+      "x": 1750,
+      "y": 550,
+      "params": {
+        "layerName": "n9"
+      }
+    },
+    {
+      "id": "n13",
+      "type": "SignalMaskReconstructor",
+      "x": 1980,
+      "y": 550,
+      "params": {
+        "originalLength": 500,
+        "windowSize": 64,
+        "stride": 16,
+        "threshold": 0.5
+      }
+    },
+    {
+      "id": "n14",
+      "type": "FindLabeledRegions",
+      "x": 2210,
+      "y": 550,
+      "params": {
+        "classId": 1
+      }
+    },
+    {
+      "id": "n15",
+      "type": "ApplyLabels",
+      "x": 2440,
+      "y": 550,
+      "params": {
+        "classId": 1
+      }
+    }
+  ],
+  "connections": [
+    {
+      "fromNode": "n1",
+      "fromPort": "signal",
+      "toNode": "n2",
+      "toPort": "signal"
+    },
+    {
+      "fromNode": "n18",
+      "fromPort": "signal",
+      "toNode": "n19",
+      "toPort": "signal"
+    },
+    {
+      "fromNode": "n3",
+      "fromPort": "output",
+      "toNode": "n4",
+      "toPort": "input"
+    },
+    {
+      "fromNode": "n4",
+      "fromPort": "output",
+      "toNode": "n5",
+      "toPort": "input"
+    },
+    {
+      "fromNode": "n5",
+      "fromPort": "output",
+      "toNode": "n6",
+      "toPort": "input"
+    },
+    {
+      "fromNode": "n6",
+      "fromPort": "output",
+      "toNode": "n7",
+      "toPort": "input"
+    },
+    {
+      "fromNode": "n4",
+      "fromPort": "output",
+      "toNode": "n8",
+      "toPort": "input0"
+    },
+    {
+      "fromNode": "n7",
+      "fromPort": "output",
+      "toNode": "n8",
+      "toPort": "input1"
+    },
+    {
+      "fromNode": "n8",
+      "fromPort": "output",
+      "toNode": "n9",
+      "toPort": "input"
+    },
+    {
+      "fromNode": "n3",
+      "fromPort": "output",
+      "toNode": "n10",
+      "toPort": "input0"
+    },
+    {
+      "fromNode": "n9",
+      "fromPort": "output",
+      "toNode": "n10",
+      "toPort": "output0"
+    },
+    {
+      "fromNode": "n10",
+      "fromPort": "model",
+      "toNode": "n11",
+      "toPort": "model"
+    },
+    {
+      "fromNode": "n2",
+      "fromPort": "output",
+      "toNode": "n11",
+      "toPort": "xData"
+    },
+    {
+      "fromNode": "n19",
+      "fromPort": "output",
+      "toNode": "n11",
+      "toPort": "yData"
+    },
+    {
+      "fromNode": "n11",
+      "fromPort": "trained_model",
+      "toNode": "n12",
+      "toPort": "model"
+    },
+    {
+      "fromNode": "n2",
+      "fromPort": "output",
+      "toNode": "n12",
+      "toPort": "inputData"
+    },
+    {
+      "fromNode": "n12",
+      "fromPort": "output",
+      "toNode": "n13",
+      "toPort": "clusterIds"
+    },
+    {
+      "fromNode": "n13",
+      "fromPort": "output",
+      "toNode": "n14",
+      "toPort": "labels"
+    },
+    {
+      "fromNode": "n14",
+      "fromPort": "regions",
+      "toNode": "n15",
+      "toPort": "regions"
+    }
+  ]
+}

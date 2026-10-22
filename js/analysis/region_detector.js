@@ -42,7 +42,7 @@
  * @param {Int8Array|number[]} labels - Etiket dizisi
  * @returns {object[]} Bölge listesi [{ start, end, label }]
  */
-function findLabeledRegions(labels) {
+function findLabeledRegions(labels, classId = null) {
     if (!labels) return [];
 
     let regions = [];
@@ -53,6 +53,13 @@ function findLabeledRegions(labels) {
     for (let i = 0; i < L; i++) {
         let val = labels[i];
         let lbl = (val === undefined || val === null) ? 0 : val;
+
+        // If classId is specified, valid, and positive, map any other label to 0
+        if (classId !== null && classId !== undefined && !isNaN(classId) && classId > 0) {
+            if (lbl !== classId) {
+                lbl = 0;
+            }
+        }
 
         if (lbl !== currentLabel) {
             // Mevcut bölgeyi kapat

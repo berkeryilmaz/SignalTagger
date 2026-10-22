@@ -6,7 +6,7 @@
  */
 
 // --- 1. NODE REGISTRY & DEFINITIONS ---
-const NODE_CATEGORIES = ['Input', 'Math', 'Logic', 'Signal Ops', 'Statistics', 'Analysis', 'Physics', 'Output'];
+const NODE_CATEGORIES = ['Input', 'Math', 'Logic', 'Signal Ops', 'Statistics', 'Analysis', 'Physics', 'Deep Learning', 'Output'];
 
 // --- POLYMORPHIC MATH HELPERS ---
 // These allow math nodes to operate on numbers, signals (Float32Array), or arrays.
@@ -377,6 +377,39 @@ const NODE_TYPES = {
     },
     'SliceSignal': { category: 'Signal Ops', name: 'Slice Signal', inputs: [{ name: 'sig', type: 'signal' }, { name: 'start', type: 'number' }, { name: 'end', type: 'number' }], outputs: [{ name: 'out', type: 'signal' }], exec: (inputs) => { let s = inputs.sig; if (!s) throw new Error("No signal"); let start = Math.max(0, Math.floor(inputs.start || 0)); let end = typeof inputs.end === 'number' ? Math.floor(inputs.end) : s.length; end = Math.min(s.length, Math.max(start, end)); return { out: s.slice(start, end) }; } },
     'Derivative': { category: 'Signal Ops', name: 'Derivative (dx)', inputs: [{ name: 'sig', type: 'signal' }], outputs: [{ name: 'out', type: 'signal' }], exec: (inputs) => { let s = inputs.sig; if (!s) throw new Error("No signal"); let out = new Float32Array(s.length); out[0] = s[1] - s[0]; for (let i = 1; i < s.length - 1; i++) out[i] = (s[i + 1] - s[i - 1]) / 2; out[s.length - 1] = s[s.length - 1] - s[s.length - 2]; return { out }; } },
+    'MovingStd': {
+        category: 'Signal Ops',
+        name: 'Moving Std Dev',
+        inputs: [{ name: 'sig', type: 'signal' }],
+        params: [{ name: 'windowSize', type: 'number', default: 15 }],
+        outputs: [{ name: 'out', type: 'signal' }],
+        exec: (inputs, params) => {
+            let s = inputs.sig;
+            let w = parseInt(params.windowSize) || 15;
+            if (!s) throw new Error("No signal");
+            
+            let out = new Float32Array(s.length);
+            let half = Math.floor(w / 2);
+            
+            for (let i = 0; i < s.length; i++) {
+                let start = Math.max(0, i - half);
+                let end = Math.min(s.length - 1, i + half);
+                let count = end - start + 1;
+                
+                let sum = 0;
+                for (let j = start; j <= end; j++) sum += s[j];
+                let mean = sum / count;
+                
+                let sumSqDiff = 0;
+                for (let j = start; j <= end; j++) {
+                    sumSqDiff += Math.pow(s[j] - mean, 2);
+                }
+                let variance = sumSqDiff / count;
+                out[i] = Math.sqrt(variance);
+            }
+            return { out };
+        }
+    },
     'InvertSignal': { category: 'Signal Ops', name: 'Invert Signal', inputs: [{ name: 'sig', type: 'signal' }], outputs: [{ name: 'out', type: 'signal' }], exec: (inputs) => { let s = inputs.sig; if (!s) throw new Error("No signal input"); let out = new Float32Array(s.length); for (let i = 0; i < s.length; i++) out[i] = -s[i]; return { out }; } },
     'MovingAverage': {
         category: 'Signal Ops', name: 'Moving Average Filter',
@@ -519,7 +552,62 @@ const NODE_TYPES = {
             return { regions };
         }
     },
-    'FindLabeledRegions': { category: 'Analysis', name: 'Find Labeled Regions', inputs: [{ name: 'labels', type: 'array' }], params: [{ name: 'classId', type: 'number', default: 2 }], outputs: [{ name: 'regions', type: 'array' }], exec: (inputs, params) => { if (!inputs.labels || !window.findLabeledRegions) throw new Error("Missing dependencies"); return { regions: window.findLabeledRegions(inputs.labels, parseInt(params.classId)) }; } },
+    'FindLabeledRegions': { 
+        category: 'Analysis', 
+        name: 'Find Labeled Regions', 
+        inputs: [{ name: 'labels', type: 'array' }], 
+        params: [
+            { name: 'classId', type: 'number', default: 2 },
+            { name: 'minWidth', type: 'number', default: 5 }
+        ], 
+        outputs: [{ name: 'regions', type: 'array' }], 
+        exec: (inputs, params) => { 
+            if (!inputs.labels || !window.findLabeledRegions) throw new Error("Missing dependencies"); 
+            let classId = parseInt(params.classId);
+            let minWidth = parseInt(params.minWidth) || 0;
+            let regions = window.findLabeledRegions(inputs.labels, classId);
+            if (minWidth > 0) {
+                regions = regions.filter(r => (r.end - r.start + 1) >= minWidth);
+            }
+            return { regions }; 
+        } 
+    },
+    'SmoothLabels': {
+        category: 'Analysis', 
+        name: 'Smooth Labels (Majority)', 
+        inputs: [{ name: 'labels', type: 'array' }], 
+        params: [{ name: 'windowSize', type: 'number', default: 11 }], 
+        outputs: [{ name: 'labels', type: 'array' }], 
+        exec: (inputs, params) => {
+            let labels = inputs.labels;
+            let w = parseInt(params.windowSize) || 11;
+            if (!labels || labels.length === 0) return { labels: [] };
+            if (w <= 1) return { labels };
+            
+            let smoothed = new Int8Array(labels.length);
+            let half = Math.floor(w / 2);
+            
+            for (let i = 0; i < labels.length; i++) {
+                let counts = {};
+                let maxCount = 0;
+                let majorityLabel = labels[i];
+                
+                let start = Math.max(0, i - half);
+                let end = Math.min(labels.length - 1, i + half);
+                
+                for (let j = start; j <= end; j++) {
+                    let lbl = labels[j];
+                    counts[lbl] = (counts[lbl] || 0) + 1;
+                    if (counts[lbl] > maxCount) {
+                        maxCount = counts[lbl];
+                        majorityLabel = lbl;
+                    }
+                }
+                smoothed[i] = majorityLabel;
+            }
+            return { labels: smoothed };
+        }
+    },
     'ExpandPeaks': { 
         category: 'Analysis', name: 'Expand Peaks to Baseline', 
         inputs: [{ name: 'sig', type: 'signal' }, { name: 'regions', type: 'array' }, { name: 'baseline', type: 'number' }], 
@@ -668,25 +756,61 @@ const NODE_TYPES = {
         category: 'Output', name: 'Display Value', inputs: [{ name: 'val', type: 'any' }], outputs: [],
         exec: (inputs, params, node) => {
             let val = inputs.val;
-            if (val === undefined) return {};
+            if (val === undefined || val === null) return {};
             let displayDiv = node.el.querySelector('.ne-display-val');
             if (!displayDiv) {
                 displayDiv = document.createElement('div');
                 displayDiv.className = 'ne-display-val';
-                displayDiv.style.padding = '5px';
+                displayDiv.style.padding = '6px 8px';
                 displayDiv.style.marginTop = '10px';
-                displayDiv.style.background = 'var(--bg-color, rgba(0,0,0,0.1))';
-                displayDiv.style.borderRadius = '3px';
-                displayDiv.style.fontSize = '12px';
+                displayDiv.style.background = 'rgba(0,0,0,0.2)';
+                displayDiv.style.border = '1px solid var(--border-color)';
+                displayDiv.style.borderRadius = '6px';
+                displayDiv.style.fontSize = '0.72rem';
+                displayDiv.style.fontFamily = 'monospace';
+                displayDiv.style.color = 'var(--text-main)';
                 displayDiv.style.wordBreak = 'break-all';
-                displayDiv.style.maxHeight = '60px';
+                displayDiv.style.maxHeight = '80px';
                 displayDiv.style.overflow = 'auto';
                 node.el.appendChild(displayDiv);
             }
-            if (typeof val === 'number') displayDiv.textContent = val.toString().length > 10 ? val.toFixed(6) : val;
-            else if (val instanceof Float32Array || val instanceof Int8Array || val instanceof Uint8Array || Array.isArray(val)) displayDiv.textContent = `Array [${val.length}]`;
-            else if (typeof val === 'object') displayDiv.textContent = JSON.stringify(val);
-            else displayDiv.textContent = String(val);
+            
+            // 1. Check if it is a TensorFlow.js Model
+            if (val.layers && val.weights) {
+                let paramCount = 0;
+                try {
+                    val.weights.forEach(w => {
+                        paramCount += w.shape.reduce((a, b) => a * b, 1);
+                    });
+                    displayDiv.innerHTML = `<span style="color:#7c4dff;font-weight:bold;">LayersModel</span><br>Layers: ${val.layers.length}<br>Params: ${paramCount.toLocaleString()}`;
+                } catch (e) {
+                    displayDiv.innerHTML = `<span style="color:#7c4dff;font-weight:bold;">LayersModel</span>`;
+                }
+            }
+            // 2. Check if it is a TensorFlow.js Tensor
+            else if (val.shape && val.dtype) {
+                displayDiv.innerHTML = `<span style="color:#00bcd4;font-weight:bold;">Tensor</span><br>Shape: [${val.shape.join(', ')}]<br>Dtype: ${val.dtype}`;
+            }
+            // 3. Float32Array or similar arrays
+            else if (val instanceof Float32Array || val instanceof Int8Array || val instanceof Uint8Array || Array.isArray(val)) {
+                displayDiv.textContent = `Array [${val.length}]`;
+            }
+            // 4. Scalar numbers
+            else if (typeof val === 'number') {
+                displayDiv.textContent = val.toString().length > 10 ? val.toFixed(6) : val;
+            }
+            // 5. Objects / JSON
+            else if (typeof val === 'object') {
+                try {
+                    displayDiv.textContent = JSON.stringify(val);
+                } catch(e) {
+                    displayDiv.textContent = String(val);
+                }
+            }
+            // 6. Generic fallback
+            else {
+                displayDiv.textContent = String(val);
+            }
             return {};
         }
     },
@@ -762,6 +886,42 @@ const NODE_TYPES = {
             return {};
         }
     },
+    'AutoApplyAllLabels': {
+        category: 'Output', name: 'Auto Apply All Labels', inputs: [{ name: 'labels', type: 'array' }], params: [{ name: 'minWidth', type: 'number', default: 5 }, { name: 'overwrite', type: 'string', default: 'true', options: ['true', 'false'] }], outputs: [],
+        exec: (inputs, params) => {
+            let predLabels = inputs.labels;
+            if (!predLabels || !state.signal) return {};
+            let minWidth = parseInt(params.minWidth) || 0;
+            let overwrite = params.overwrite !== 'false';
+            
+            let finalLabels;
+            if (overwrite || !state.labels || state.labels.length !== state.signal.length) {
+                finalLabels = new Int8Array(state.signal.length);
+            } else {
+                finalLabels = new Int8Array(state.labels);
+            }
+            
+            if (window.findLabeledRegions) {
+                let regions = window.findLabeledRegions(predLabels, null);
+                for (let r of regions) {
+                    let width = r.end - r.start + 1;
+                    if (width >= minWidth) {
+                        for (let i = r.start; i <= r.end; i++) {
+                            finalLabels[i] = r.label;
+                        }
+                    }
+                }
+            } else {
+                for (let i = 0; i < predLabels.length; i++) {
+                    if (predLabels[i] > 0) {
+                        finalLabels[i] = predLabels[i];
+                    }
+                }
+            }
+            if (window.updateState) window.updateState({ labels: finalLabels });
+            return {};
+        }
+    },
     'DisplayResults': {
         category: 'Output', name: 'Table Analysis Data', inputs: [{ name: 'results', type: 'array' }], outputs: [],
         exec: (inputs) => {
@@ -808,6 +968,359 @@ const NODE_TYPES = {
 
             return {};
         }
+    },
+    // --- DEEP LEARNING ---
+    'InputLayer': {
+        category: 'Deep Learning',
+        name: 'Input Layer',
+        params: [
+            { name: 'shape', type: 'string', default: '64,1' },
+            { name: 'dtype', type: 'string', default: 'float32', options: ['float32', 'int32', 'bool'] }
+        ],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const shape = params.shape.split(',').map(Number);
+            const dtype = params.dtype || 'float32';
+            const node = new window.AtomicNodes.InputLayerNode(n.id, n.def.name, { shape, dtype });
+            return node.execute(inputs);
+        }
+    },
+    'Conv1D': {
+        category: 'Deep Learning',
+        name: 'Conv1D',
+        inputs: [{ name: 'input', type: 'any' }],
+        params: [
+            { name: 'filters', type: 'number', default: 8 },
+            { name: 'kernelSize', type: 'number', default: 3 },
+            { name: 'strides', type: 'number', default: 1 },
+            { name: 'padding', type: 'string', default: 'same', options: ['same', 'valid'] },
+            { name: 'activation', type: 'string', default: 'relu', options: ['relu', 'sigmoid', 'tanh', 'linear'] }
+        ],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const filters = parseInt(params.filters) || 8;
+            const kernelSize = parseInt(params.kernelSize) || 3;
+            const strides = parseInt(params.strides) || 1;
+            const padding = params.padding || 'same';
+            const activation = params.activation || 'relu';
+            const node = new window.AtomicNodes.Conv1DNode(n.id, n.def.name, { filters, kernelSize, strides, padding, activation });
+            return node.execute(inputs);
+        }
+    },
+    'MaxPooling1D': {
+        category: 'Deep Learning',
+        name: 'MaxPooling1D',
+        inputs: [{ name: 'input', type: 'any' }],
+        params: [
+            { name: 'poolSize', type: 'number', default: 2 },
+            { name: 'strides', type: 'number', default: 2 },
+            { name: 'padding', type: 'string', default: 'same', options: ['same', 'valid'] }
+        ],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const poolSize = parseInt(params.poolSize) || 2;
+            const strides = parseInt(params.strides) || 2;
+            const padding = params.padding || 'same';
+            const node = new window.AtomicNodes.MaxPooling1DNode(n.id, n.def.name, { poolSize, strides, padding });
+            return node.execute(inputs);
+        }
+    },
+    'Conv1DTranspose': {
+        category: 'Deep Learning',
+        name: 'Conv1DTranspose',
+        inputs: [{ name: 'input', type: 'any' }],
+        params: [
+            { name: 'filters', type: 'number', default: 8 },
+            { name: 'kernelSize', type: 'number', default: 3 },
+            { name: 'strides', type: 'number', default: 2 },
+            { name: 'padding', type: 'string', default: 'same', options: ['same', 'valid'] },
+            { name: 'activation', type: 'string', default: 'relu', options: ['relu', 'sigmoid', 'tanh', 'linear'] }
+        ],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const filters = parseInt(params.filters) || 8;
+            const kernelSize = parseInt(params.kernelSize) || 3;
+            const strides = parseInt(params.strides) || 2;
+            const padding = params.padding || 'same';
+            const activation = params.activation || 'relu';
+            const node = new window.AtomicNodes.Conv1DTransposeNode(n.id, n.def.name, { filters, kernelSize, strides, padding, activation });
+            return node.execute(inputs);
+        }
+    },
+    'Concatenate': {
+        category: 'Deep Learning',
+        name: 'Concatenate',
+        inputs: [
+            { name: 'input0', type: 'any' },
+            { name: 'input1', type: 'any' }
+        ],
+        params: [
+            { name: 'axis', type: 'number', default: -1 }
+        ],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const axis = parseInt(params.axis) !== undefined ? parseInt(params.axis) : -1;
+            const node = new window.AtomicNodes.ConcatenateNode(n.id, n.def.name, { axis });
+            return node.execute(inputs);
+        }
+    },
+    'ConcatTensors': {
+        category: 'Deep Learning',
+        name: 'Concat Tensors (Data)',
+        inputs: [
+            { name: 'input0', type: 'any' },
+            { name: 'input1', type: 'any' },
+            { name: 'input2', type: 'any', optional: true },
+            { name: 'input3', type: 'any', optional: true }
+        ],
+        params: [
+            { name: 'axis', type: 'number', default: -1 }
+        ],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params) => {
+            const axis = parseInt(params.axis) !== undefined ? parseInt(params.axis) : -1;
+            let tensors = [];
+            if (inputs.input0) tensors.push(inputs.input0);
+            if (inputs.input1) tensors.push(inputs.input1);
+            if (inputs.input2) tensors.push(inputs.input2);
+            if (inputs.input3) tensors.push(inputs.input3);
+            
+            if (tensors.length === 0) return { output: null };
+            if (tensors.length === 1) return { output: tensors[0] };
+            
+            if (typeof tf !== 'undefined') {
+                let tfTensors = tensors.map(t => {
+                    if (t instanceof tf.Tensor) return t;
+                    return tf.tensor(t);
+                });
+                return { output: tf.concat(tfTensors, axis) };
+            }
+            throw new Error("ConcatTensors: TensorFlow.js is required to concatenate tensors.");
+        }
+    },
+    'ModelCompiler': {
+        category: 'Deep Learning',
+        name: 'Model Compiler',
+        inputs: [
+            { name: 'input0', type: 'any' },
+            { name: 'output0', type: 'any' }
+        ],
+        params: [
+            { name: 'optimizer', type: 'string', default: 'adam', options: ['adam', 'sgd', 'rmsprop'] },
+            { name: 'loss', type: 'string', default: 'binaryCrossentropy', options: ['meanSquaredError', 'binaryCrossentropy', 'categoricalCrossentropy'] }
+        ],
+        outputs: [{ name: 'model', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const optimizer = params.optimizer || 'adam';
+            const loss = params.loss || 'binaryCrossentropy';
+            const node = new window.AtomicNodes.ModelCompilerNode(n.id, n.def.name, { optimizer, loss });
+            return node.execute(inputs);
+        }
+    },
+    'ModelTrainer': {
+        category: 'Deep Learning',
+        name: 'Model Trainer',
+        inputs: [
+            { name: 'model', type: 'any' },
+            { name: 'xData', type: 'array' },
+            { name: 'yData', type: 'array' }
+        ],
+        params: [
+            { name: 'trainModel', type: 'string', default: 'true', options: ['true', 'false'] },
+            { name: 'epochs', type: 'number', default: 5 },
+            { name: 'batchSize', type: 'number', default: 8 },
+            { name: 'validationSplit', type: 'number', default: 0.1 },
+            { name: 'earlyStopping', type: 'string', default: 'false', options: ['false', 'true'] },
+            { name: 'patience', type: 'number', default: 5 },
+            { name: 'monitor', type: 'string', default: 'val_loss', options: ['val_loss', 'loss'] }
+        ],
+        outputs: [
+            { name: 'trained_model', type: 'any' },
+            { name: 'history', type: 'any' }
+        ],
+        exec: async (inputs, params, n) => {
+            const trainModel = params.trainModel !== 'false' && params.trainModel !== false;
+            const epochs = parseInt(params.epochs) || 5;
+            const batchSize = parseInt(params.batchSize) || 8;
+            const validationSplit = parseFloat(params.validationSplit) || 0.1;
+            const earlyStopping = params.earlyStopping === 'true' || params.earlyStopping === true;
+            const patience = parseInt(params.patience) || 5;
+            const monitor = params.monitor || 'val_loss';
+
+            const node = new window.AtomicNodes.ModelTrainerNode(n.id, n.def.name, {
+                trainModel,
+                epochs,
+                batchSize,
+                validationSplit,
+                earlyStopping,
+                patience,
+                monitor
+            });
+            const res = await node.executeAsync(inputs, n);
+            return {
+                trained_model: res.model,
+                history: res.history
+            };
+        }
+    },
+    'LatentExtractor': {
+        category: 'Deep Learning',
+        name: 'Latent Extractor',
+        inputs: [
+            { name: 'model', type: 'any' },
+            { name: 'inputData', type: 'array' }
+        ],
+        params: [
+            { name: 'layerName', type: 'string', default: 'bottleneck' }
+        ],
+        outputs: [{ name: 'output', type: 'array' }],
+        exec: (inputs, params, n) => {
+            const layerName = params.layerName || 'bottleneck';
+            const node = new window.AtomicNodes.LatentExtractorNode(n.id, n.def.name, { layerName });
+            return node.execute(inputs);
+        }
+    },
+    'SlidingWindow': {
+        category: 'Deep Learning',
+        name: 'Sliding Window',
+        inputs: [{ name: 'signal', type: 'signal' }],
+        params: [
+            { name: 'windowSize', type: 'number', default: 64 },
+            { name: 'stride', type: 'number', default: 16 }
+        ],
+        outputs: [{ name: 'output', type: 'array' }],
+        exec: (inputs, params, n) => {
+            const windowSize = parseInt(params.windowSize) || 64;
+            const stride = parseInt(params.stride) || 16;
+            const node = new window.AtomicNodes.SlidingWindowNode(n.id, n.def.name, { windowSize, stride });
+            return node.execute(inputs);
+        }
+    },
+    'KMeansClustering': {
+        category: 'Deep Learning',
+        name: 'K-Means Clustering',
+        inputs: [{ name: 'embeddings', type: 'array' }],
+        params: [
+            { name: 'k', type: 'number', default: 3 },
+            { name: 'maxIterations', type: 'number', default: 50 }
+        ],
+        outputs: [
+            { name: 'output', type: 'array' },
+            { name: 'centroids', type: 'array' }
+        ],
+        exec: (inputs, params, n) => {
+            let flatEmbeddings = inputs.embeddings;
+            let needsDispose = false;
+            const isTensor = flatEmbeddings && (
+                (typeof tf !== 'undefined' && flatEmbeddings instanceof tf.Tensor) ||
+                (flatEmbeddings.constructor && flatEmbeddings.constructor.name === 'Tensor') ||
+                (typeof flatEmbeddings.dataSync === 'function' && typeof flatEmbeddings.dispose === 'function')
+            );
+            if (isTensor && flatEmbeddings.shape.length > 2) {
+                flatEmbeddings = tf.tidy(() => flatEmbeddings.reshape([flatEmbeddings.shape[0], -1]));
+                needsDispose = true;
+            }
+            const k = parseInt(params.k) || 3;
+            const maxIterations = parseInt(params.maxIterations) || 50;
+            const node = new window.AtomicNodes.KMeansClusteringNode(n.id, n.def.name, { k, maxIterations });
+            const res = node.execute({ embeddings: flatEmbeddings });
+            if (needsDispose) {
+                flatEmbeddings.dispose();
+            }
+            return res;
+        }
+    },
+    'DenseKMeansClustering': {
+        category: 'Deep Learning',
+        name: 'Dense K-Means Clustering',
+        inputs: [{ name: 'embeddings', type: 'array' }],
+        params: [
+            { name: 'k', type: 'number', default: 3 },
+            { name: 'maxIterations', type: 'number', default: 50 }
+        ],
+        outputs: [
+            { name: 'output', type: 'array' }
+        ],
+        exec: (inputs, params, n) => {
+            const k = parseInt(params.k) || 3;
+            const maxIterations = parseInt(params.maxIterations) || 50;
+            const node = new window.AtomicNodes.DenseKMeansClusteringNode(n.id, n.def.name, { k, maxIterations });
+            return node.execute({ embeddings: inputs.embeddings });
+        }
+    },
+    'SignalMaskReconstructor': {
+        category: 'Deep Learning',
+        name: 'Signal Mask Reconstructor',
+        inputs: [{ name: 'clusterIds', type: 'array' }],
+        params: [
+            { name: 'originalLength', type: 'number', default: 500 },
+            { name: 'windowSize', type: 'number', default: 64 },
+            { name: 'stride', type: 'number', default: 16 },
+            { name: 'threshold', type: 'number', default: 0.5 }
+        ],
+        outputs: [{ name: 'output', type: 'signal' }],
+        exec: (inputs, params, n) => {
+            const originalLength = (window.state && window.state.signal) ? window.state.signal.length : (parseInt(params.originalLength) || 500);
+            const windowSize = parseInt(params.windowSize) || 64;
+            const stride = parseInt(params.stride) || 16;
+            const threshold = parseFloat(params.threshold) || 0.5;
+            const node = new window.AtomicNodes.SignalMaskReconstructorNode(n.id, n.def.name, { originalLength, windowSize, stride, threshold });
+            return node.execute(inputs);
+        }
+    },
+    'Dense': {
+        category: 'Deep Learning',
+        name: 'Dense (Fully Connected)',
+        inputs: [{ name: 'input', type: 'any' }],
+        params: [
+            { name: 'units', type: 'number', default: 8 },
+            { name: 'activation', type: 'string', default: 'relu', options: ['relu', 'sigmoid', 'tanh', 'softmax', 'linear'] }
+        ],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const units = parseInt(params.units) || 8;
+            const activation = params.activation || 'relu';
+            const node = new window.AtomicNodes.DenseNode(n.id, n.def.name, { units, activation });
+            return node.execute(inputs);
+        }
+    },
+    'Flatten': {
+        category: 'Deep Learning',
+        name: 'Flatten',
+        inputs: [{ name: 'input', type: 'any' }],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const node = new window.AtomicNodes.FlattenNode(n.id, n.def.name);
+            return node.execute(inputs);
+        }
+    },
+    'Dropout': {
+        category: 'Deep Learning',
+        name: 'Dropout',
+        inputs: [{ name: 'input', type: 'any' }],
+        params: [
+            { name: 'rate', type: 'number', default: 0.2 }
+        ],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const rate = parseFloat(params.rate) || 0.2;
+            const node = new window.AtomicNodes.DropoutNode(n.id, n.def.name, { rate });
+            return node.execute(inputs);
+        }
+    },
+    'BatchNormalization': {
+        category: 'Deep Learning',
+        name: 'Batch Normalization',
+        inputs: [{ name: 'input', type: 'any' }],
+        params: [
+            { name: 'axis', type: 'number', default: -1 }
+        ],
+        outputs: [{ name: 'output', type: 'any' }],
+        exec: (inputs, params, n) => {
+            const axis = parseInt(params.axis) || -1;
+            const node = new window.AtomicNodes.BatchNormalizationNode(n.id, n.def.name, { axis });
+            return node.execute(inputs);
+        }
     }
 };
 
@@ -821,6 +1334,7 @@ class Node {
         this.y = y;
         this.def = NODE_TYPES[type];
         this.params = {};
+        this.customName = ''; // Custom display name
 
         if (this.def.params) {
             this.def.params.forEach(p => {
@@ -1073,9 +1587,9 @@ class NodeEditor {
         let catColor = `var(--ne-cat-${n.def.category.toLowerCase().replace(' ', '')})`;
 
         let html = `
-            <div class="ne-node-header" style="background: ${catColor}">
+            <div class="ne-node-header" style="background: ${catColor}" title="Double click to rename node">
                 <span class="ne-node-icon">⚡</span>
-                ${n.def.name}
+                <span class="ne-node-title">${n.customName || n.def.name} [${id}]</span>
                 <button class="ne-node-delete" onclick="window.nodeEditor.deleteNode('${id}')">✕</button>
             </div>
             <div class="ne-node-body">`;
@@ -1125,6 +1639,22 @@ class NodeEditor {
 
         if (n.def.init) {
             n.def.init(n);
+        }
+
+        // Double-click on header to rename node
+        const headerEl = el.querySelector('.ne-node-header');
+        if (headerEl) {
+            headerEl.addEventListener('dblclick', e => {
+                e.stopPropagation();
+                let newName = prompt(`Enter custom name for node ${id}:`, n.customName || n.def.name);
+                if (newName !== null) {
+                    n.customName = newName.trim();
+                    const titleEl = headerEl.querySelector('.ne-node-title');
+                    if (titleEl) {
+                        titleEl.textContent = `${n.customName || n.def.name} [${id}]`;
+                    }
+                }
+            });
         }
 
         // Node Drag interactions
@@ -1228,6 +1758,16 @@ class NodeEditor {
 
         this.updateConnectionPath(conn);
         this.updatePortStyles();
+
+        // If the source has cached output values, and the target is a DisplayValue node,
+        // immediately execute the display node so it shows the output without a pipeline re-run!
+        const sourceNode = this.nodes[fromN];
+        const targetNode = this.nodes[toN];
+        if (sourceNode && sourceNode.lastOutputs && sourceNode.lastOutputs[fromP] !== undefined && targetNode) {
+            if (targetNode.type === 'DisplayValue') {
+                targetNode.def.exec({ val: sourceNode.lastOutputs[fromP] }, targetNode.params, targetNode);
+            }
+        }
     }
 
     deleteConnection(pathEl) {
@@ -1472,7 +2012,9 @@ class NodeEditor {
         });
 
         // Prepare accumulation targets if these output nodes are present
-        if (order.some(id => this.nodes[id].type === 'ApplyLabels') && window.state && window.state.signal) {
+        const hasApplyLabels = order.some(id => this.nodes[id].type === 'ApplyLabels');
+        const hasAutoApplyOverwrite = order.some(id => this.nodes[id].type === 'AutoApplyAllLabels' && this.nodes[id].params.overwrite !== 'false');
+        if ((hasApplyLabels || hasAutoApplyOverwrite) && window.state && window.state.signal) {
             window.updateState({ labels: new Int8Array(window.state.signal.length) });
         }
         if (order.some(id => this.nodes[id].type === 'DisplayResults')) {
@@ -1496,8 +2038,9 @@ class NodeEditor {
                 // Mock delay for visual effect
                 await new Promise(r => setTimeout(r, 100));
 
-                let res = n.def.exec(inputs, n.params, n); // Pass "n" for DOM access
+                let res = await n.def.exec(inputs, n.params, n); // Pass "n" for DOM access
                 contextOutputs[id] = res;
+                n.lastOutputs = res; // Cache outputs on node instance
                 n.el.classList.replace('executing', 'success');
             } catch (e) {
                 console.error("Node error: ", id, e);
@@ -1518,7 +2061,7 @@ class NodeEditor {
         return JSON.stringify({
             version: 1,
             nodes: Object.values(this.nodes).map(n => ({
-                id: n.id, type: n.type, x: n.x, y: n.y, params: n.params
+                id: n.id, type: n.type, x: n.x, y: n.y, params: n.params, customName: n.customName || ''
             })),
             connections: this.connections.map(c => ({
                 fromNode: c.fromNode, fromPort: c.fromPort,
@@ -1575,6 +2118,14 @@ class NodeEditor {
                 this.createNode(n.type, n.x, n.y, n.id);
                 let inst = this.nodes[n.id];
                 if (!inst) return;
+
+                if (n.customName) {
+                    inst.customName = n.customName;
+                    const titleEl = inst.el.querySelector('.ne-node-title');
+                    if (titleEl) {
+                        titleEl.textContent = `${inst.customName} [${inst.id}]`;
+                    }
+                }
 
                 // Merge saved params, keeping defaults for any missing keys
                 if (n.params) {
