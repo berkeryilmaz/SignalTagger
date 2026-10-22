@@ -9,7 +9,9 @@
 // Core Utils
 
 function roundToPrecision(num) {
-    let factor = Math.pow(10, state.dataPrecision);
+    if (num == null || isNaN(num)) return num;
+    let prec = (typeof state !== 'undefined' && state && state.dataPrecision !== undefined) ? state.dataPrecision : 3;
+    let factor = Math.pow(10, prec);
     return Math.round(num * factor) / factor;
 }
 

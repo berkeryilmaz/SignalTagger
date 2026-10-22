@@ -26,8 +26,15 @@ function invertSignal() {
 }
 
 function updatePrecision() {
-    let val = parseInt(elements.precisionInput.value) || 5;
+    let val = (elements && elements.precisionInput) ? parseInt(elements.precisionInput.value) : 3;
+    if (isNaN(val) || val < 0) val = 3;
+    val = Math.min(9, Math.max(0, val));
     state.dataPrecision = val;
+
+    let neInput = document.getElementById('nePrecisionInput');
+    if (neInput && parseInt(neInput.value) !== val) {
+        neInput.value = val;
+    }
 
     if (state.signal && state.signal.length > 0) {
         if (window.recalcFilters) window.recalcFilters();
