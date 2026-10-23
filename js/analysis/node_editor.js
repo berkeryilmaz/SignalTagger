@@ -1040,6 +1040,151 @@ const NODE_TYPES = {
             return { regions: outRegions, length: maxOutL };
         }
     },
+    'MergeOverlappingRegions': {
+        category: 'Analysis', name: 'Merge Overlapping Regions',
+        inputs: [
+            { name: 'regions', type: 'array' },
+            { name: 'maxGap', type: 'number' },
+            { name: 'sig', type: 'signal' }
+        ],
+        params: [
+            { name: 'maxGap', type: 'number', default: 0 },
+            { name: 'mergeAdjacent', type: 'boolean', default: 'true', options: ['true', 'false'] },
+            { name: 'mergeBy', type: 'string', default: 'all', options: ['all', 'same_label'] },
+            { name: 'labelResolution', type: 'string', default: 'first', options: ['first', 'dominant', 'last'] }
+        ],
+        outputs: [
+            { name: 'regions', type: 'array' },
+            { name: 'count', type: 'number' },
+            { name: 'mergedCount', type: 'number' }
+        ],
+        exec: (inputs, params, node) => {
+            let raw = inputs.regions || inputs.results || inputs.arr || inputs.filtered || inputs.expanded;
+            let regs = _normalizeRegions(raw);
+            if (!regs || regs.length === 0) {
+                if (node && node.el) {
+                    let st = node.el.querySelector('.ne-merge-status');
+                    if (st) st.textContent = '0 regions';
+                }
+                return { regions: [], count: 0, mergedCount: 0 };
+            }
+
+            let maxGap = inputs.maxGap !== undefined ? Number(inputs.maxGap) : (parseFloat(params.maxGap) || 0);
+            if (isNaN(maxGap) || maxGap < 0) maxGap = 0;
+
+            let mergeAdjacent = params.mergeAdjacent === true || params.mergeAdjacent === 'true' || params.mergeAdjacent === undefined;
+            let mergeBy = params.mergeBy || 'all';
+            let labelResolution = params.labelResolution || 'first';
+            let sig = _resolveSignal(inputs.sig);
+
+            let outRegions = [];
+            if (window.mergeOverlappingRegions) {
+                outRegions = window.mergeOverlappingRegions(regs, {
+                    maxGap,
+                    mergeAdjacent,
+                    mergeBy,
+                    labelResolution,
+                    signal: sig
+                });
+            } else {
+                let cleaned = regs.map((r, i) => {
+                    let s = Math.round(Number(r.start) || 0);
+                    let e = Math.round(Number(r.end) || 0);
+                    if (s > e) { let tmp = s; s = e; e = tmp; }
+                    return {
+                        ...r,
+                        _origId: r.id !== undefined ? r.id : (i + 1),
+                        start: s,
+                        end: e,
+                        width: e - s + 1,
+                        label: r.label !== undefined ? r.label : 2
+                    };
+                });
+
+                function _mergeGroup(grp) {
+                    if (grp.length <= 1) return grp.map(r => ({ ...r, constituents: [r] }));
+                    grp.sort((a, b) => a.start - b.start || a.end - b.end);
+                    let m = [];
+                    let cur = { ...grp[0], constituents: [grp[0]] };
+                    for (let i = 1; i < grp.length; i++) {
+                        let next = grp[i];
+                        let maxReach = cur.end + (mergeAdjacent ? 1 : 0) + maxGap;
+                        if (next.start <= maxReach) {
+                            cur.end = Math.max(cur.end, next.end);
+                            cur.width = cur.end - cur.start + 1;
+                            cur.constituents.push(next);
+                        } else {
+                            m.push(cur);
+                            cur = { ...next, constituents: [next] };
+                        }
+                    }
+                    m.push(cur);
+                    return m;
+                }
+
+                let mergedGroups = [];
+                if (mergeBy === 'same_label') {
+                    let byLabel = {};
+                    cleaned.forEach(r => {
+                        let k = r.label;
+                        if (!byLabel[k]) byLabel[k] = [];
+                        byLabel[k].push(r);
+                    });
+                    Object.keys(byLabel).forEach(k => mergedGroups.push(..._mergeGroup(byLabel[k])));
+                    mergedGroups.sort((a, b) => a.start - b.start || a.end - b.end);
+                } else {
+                    mergedGroups = _mergeGroup(cleaned);
+                }
+
+                outRegions = mergedGroups.map((m, idx) => {
+                    let consts = m.constituents || [m];
+                    let chosenLabel = m.label;
+                    if (consts.length > 1) {
+                        if (labelResolution === 'last') chosenLabel = consts[consts.length - 1].label;
+                        else if (labelResolution === 'dominant') chosenLabel = consts.reduce((p, c) => c.width > p.width ? c : p, consts[0]).label;
+                        else chosenLabel = consts[0].label;
+                    }
+                    let res = {
+                        ...consts[0],
+                        id: idx + 1,
+                        start: m.start,
+                        end: m.end,
+                        width: m.end - m.start + 1,
+                        label: chosenLabel,
+                        mergedFromCount: consts.length
+                    };
+                    delete res._origId;
+                    delete res.constituents;
+                    return res;
+                });
+            }
+
+            let mergedCount = regs.length - outRegions.length;
+
+            if (node && node.el) {
+                let statusDiv = node.el.querySelector('.ne-merge-status');
+                if (!statusDiv) {
+                    statusDiv = document.createElement('div');
+                    statusDiv.className = 'ne-merge-status';
+                    statusDiv.style.padding = '4px 6px';
+                    statusDiv.style.marginTop = '6px';
+                    statusDiv.style.background = 'rgba(76, 175, 80, 0.15)';
+                    statusDiv.style.border = '1px solid var(--ne-cat-analysis)';
+                    statusDiv.style.borderRadius = '3px';
+                    statusDiv.style.fontSize = '11px';
+                    statusDiv.style.color = 'var(--text-main)';
+                    node.el.appendChild(statusDiv);
+                }
+                statusDiv.textContent = `✓ ${regs.length} → ${outRegions.length} regions (${mergedCount} merged)`;
+            }
+
+            return {
+                regions: outRegions,
+                count: outRegions.length,
+                mergedCount: mergedCount
+            };
+        }
+    },
 
     // --- PHYSICS ---
     'CalculatePhysics': {
